@@ -122,6 +122,7 @@ Visual review:
   ✗ 04-stripe-iframe: iframe overflows on viewport < 1280px
 
 Artifacts:
+  Report: .swarm-test/runs/<ts>/report.html   (opens in browser)
   Spec  : .swarm-test/runs/<ts>/feature.spec.ts
   Shots : .swarm-test/runs/<ts>/*.png
 ```
@@ -131,7 +132,128 @@ Severity scale for visual findings:
 - ⚠ **friction** — works but degrades the experience
 - ✓ **ok**
 
-### 8. Learn from the user's reaction
+### 8. Generate the visual report
+
+After the terminal summary, write a self-contained HTML report so the user can browse the screenshots and findings visually. Write it to `.swarm-test/runs/<ts>/report.html` using exactly this structure (substitute the placeholders, do NOT add external CSS/JS, do NOT pull from CDNs — must work offline via `file://`):
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>swarm-test · {{FEATURE_TITLE}}</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--panel2:#1f2630;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--green:#3fb950;--yellow:#d29922;--red:#f85149;--orange:#db6d28;--accent:#58a6ff}
+*{box-sizing:border-box}html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:24px}
+header{padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:24px}
+h1{font-size:18px;margin:0 0 4px}.sub{color:var(--dim);font-size:13px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px}
+.kpi{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px}
+.kpi-l{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.kpi-v{font-size:22px;font-weight:600}.kpi.ok .kpi-v{color:var(--green)}.kpi.warn .kpi-v{color:var(--yellow)}.kpi.bad .kpi-v{color:var(--red)}
+section{margin-bottom:32px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:0 0 12px}
+.finding{background:var(--panel);border-left:3px solid var(--yellow);border-radius:4px;padding:12px 16px;margin-bottom:8px}
+.finding.bad{border-left-color:var(--red)}.finding.warn{border-left-color:var(--orange)}.finding.ok{border-left-color:var(--green)}
+.f-head{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.badge{font-size:10px;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.04em;background:var(--border);color:var(--dim)}
+.badge.bad{background:var(--red);color:#fff}.badge.warn{background:var(--orange);color:#fff}.badge.ok{background:var(--green);color:#000}
+.steps{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.step{background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:zoom-in}
+.step img{width:100%;display:block;border-bottom:1px solid var(--border);background:var(--panel2)}
+.step-meta{padding:10px 12px}.step-label{font-weight:500}.step-note{color:var(--dim);font-size:12px;margin-top:2px}
+.step-status{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.step-status.ok{background:var(--green)}.step-status.warn{background:var(--yellow)}.step-status.bad{background:var(--red)}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:100;cursor:zoom-out}
+.lightbox.on{display:flex}.lightbox img{max-width:95%;max-height:95%;border:1px solid var(--border);border-radius:4px}
+footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--border);color:var(--dim);font-size:12px}
+code{background:var(--panel2);padding:2px 5px;border-radius:3px;font-size:12px;color:var(--text)}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>{{FEATURE_TITLE}}</h1>
+    <div class="sub">{{TIMESTAMP}} · {{TARGET_URL}} · run {{RUN_TS}}</div>
+  </header>
+
+  <section class="kpis">
+    <div class="kpi ok"><div class="kpi-l">OK</div><div class="kpi-v">{{OK_COUNT}}</div></div>
+    <div class="kpi warn"><div class="kpi-l">Friction</div><div class="kpi-v">{{WARN_COUNT}}</div></div>
+    <div class="kpi bad"><div class="kpi-l">Broken</div><div class="kpi-v">{{BAD_COUNT}}</div></div>
+    <div class="kpi"><div class="kpi-l">Playwright</div><div class="kpi-v" style="font-size:16px">{{PW_STATUS}}</div></div>
+  </section>
+
+  <section>
+    <h2>Findings</h2>
+    {{FINDINGS_HTML}}
+  </section>
+
+  <section>
+    <h2>Screenshots</h2>
+    <div class="steps">{{SCREENSHOTS_HTML}}</div>
+  </section>
+
+  <footer>
+    <div>Spec: <code>{{SPEC_PATH}}</code></div>
+    <div>Memory: <code>.swarm-test/memory/</code></div>
+  </footer>
+</div>
+
+<div class="lightbox" id="lb" onclick="this.classList.remove('on')"><img id="lbi" src=""></div>
+<script>
+document.querySelectorAll('.step img').forEach(img=>{
+  img.parentElement.addEventListener('click',()=>{document.getElementById('lbi').src=img.src;document.getElementById('lb').classList.add('on')})
+});
+</script>
+</body>
+</html>
+```
+
+Substitutions:
+
+- `{{FEATURE_TITLE}}` — one-line description of what was tested
+- `{{TIMESTAMP}}` — human date (`2026-05-14 20:00`)
+- `{{RUN_TS}}` — the ISO timestamp of the run dir
+- `{{TARGET_URL}}`
+- `{{OK_COUNT}}`, `{{WARN_COUNT}}`, `{{BAD_COUNT}}` — counts of findings by severity
+- `{{PW_STATUS}}` — e.g. `2/3 passed`
+- `{{SPEC_PATH}}` — relative path to the spec file
+- `{{FINDINGS_HTML}}` — concatenated `<div class="finding ok|warn|bad">…</div>` blocks, one per finding. Template per finding:
+  ```html
+  <div class="finding <ok|warn|bad>">
+    <div class="f-head"><span class="badge <ok|warn|bad>"><label></span></div>
+    <div><strong>step-label</strong> — factual constat (quote visible text if relevant)</div>
+    <div style="color:var(--dim);font-size:12px;margin-top:4px">Suggestion: …</div>
+  </div>
+  ```
+- `{{SCREENSHOTS_HTML}}` — concatenated `<div class="step">…</div>` blocks, one per screenshot, in order. Template per step (image path is RELATIVE to the report file — both live in the same run dir, so just use the filename):
+  ```html
+  <div class="step">
+    <img src="01-navigate.png" alt="01-navigate">
+    <div class="step-meta">
+      <div class="step-label"><span class="step-status <ok|warn|bad>"></span>01-navigate</div>
+      <div class="step-note">optional one-line observation</div>
+    </div>
+  </div>
+  ```
+
+Then open it:
+
+```bash
+REPORT=".swarm-test/runs/<ts>/report.html"
+case "$(uname)" in
+  Darwin) open "$REPORT" ;;
+  Linux)  xdg-open "$REPORT" 2>/dev/null || echo "Open manually: $REPORT" ;;
+  *)      echo "Open manually: $REPORT" ;;
+esac
+```
+
+Tell the user the report path in the terminal summary so they know where to find it later.
+
+### 9. Learn from the user's reaction
 
 After you report, the user may confirm or dismiss findings:
 - **Confirms a finding** ("yes that's wrong, fix it") → append a one-liner to `.swarm-test/memory/learned-rules.md` describing the pattern, so future runs are more sensitive to it.
