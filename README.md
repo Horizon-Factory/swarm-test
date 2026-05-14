@@ -49,7 +49,7 @@ Claude will:
 1. **Recap** what you just changed in the conversation.
 2. **Check** the dev server is up (it tells you what to run if not — it won't spawn a server behind your back).
 3. **Write** a focused Playwright spec at `.swarm-test/runs/<timestamp>/feature.spec.ts`.
-4. **Run** it via `node scripts/run-spec.js`.
+4. **Run** it via `npx playwright test`.
 5. **Read** every screenshot and analyze it for wording, UX, business rule, dead-end, and error-message issues.
 6. **Report** findings with severity (`✓ ok` / `⚠ friction` / `✗ broken`).
 7. **Learn** from your reactions — confirmed issues go to `.swarm-test/memory/learned-rules.md`, dismissals go to `.swarm-test/memory/known-false-positives.md`.
@@ -62,14 +62,13 @@ The Claude that just coded your feature already knows what it did, why, and what
 
 ```
 swarm-test/
-├── SKILL.md                          # Workflow Claude follows
-├── README.md                         # This file
-├── scripts/
-│   ├── ensure-dev-server.js          # Probes target URL, returns ready/not-ready + suggested command
-│   └── run-spec.js                   # Runs a single Playwright spec, returns structured JSON
+├── SKILL.md                # Workflow Claude follows
+├── README.md               # This file
 └── templates/
-    └── spec-template.ts              # Reference structure for a generated spec
+    └── spec-template.ts    # Reference structure for a generated Playwright spec
 ```
+
+All operational logic (server probing, spec execution, auth handling) is inlined as bash commands in `SKILL.md` — no external scripts to invoke. Keeps the skill path-independent across project-level and user-level installs.
 
 ## Memory
 

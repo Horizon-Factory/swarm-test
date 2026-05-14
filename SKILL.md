@@ -30,21 +30,23 @@ Confirm with the user if the journey is ambiguous. **Do not proceed silently** �
 
 ### 2. Make sure the dev server is up
 
-Run from the project root (where `package.json` with the dev script lives):
+Determine the target URL:
+- Read the nearest ancestor `package.json` with the Read tool.
+- Look at `scripts.dev`. Extract the port from `--port N`, `--port=N`, `-p N`, or `-p=N`. Default to 3000 if absent.
+- Target URL is `http://localhost:<port>`.
+
+Probe with curl:
 
 ```bash
-node $CLAUDE_PROJECT_DIR/.claude/skills/swarm-test/scripts/ensure-dev-server.js
+curl -fsS --max-time 3 http://localhost:<port>/ >/dev/null && echo READY || echo DOWN
 ```
 
-(If installed at user level, substitute `~/.claude/skills/swarm-test/`.)
+- **READY** → proceed.
+- **DOWN** → **do NOT spawn the server yourself.** Tell the user the exact command to run, derived from the detected package manager (look at the lockfile in the same directory or above: `pnpm-lock.yaml` → `pnpm`, `yarn.lock` → `yarn`, `bun.lockb` → `bun`, `package-lock.json` → `npm`; or read `packageManager` field in package.json). Example:
 
-It prints JSON. Two possible shapes:
+  > Your dev server is not responding on http://localhost:3000. Run `pnpm run dev` from `/Users/.../apps/uca` in another terminal, wait for it to be ready, then say "go".
 
-- `{ "ready": true, "url": "..." }` — proceed
-- `{ "ready": false, "suggested_command": "pnpm run dev", "suggested_cwd": "..." }` — **do NOT spawn the server yourself**. Tell the user:
-  > Your dev server is not responding on `<url>`. Run `<suggested_command>` from `<cwd>` in another terminal, then say "go".
-
-  Wait for their explicit confirmation. Server lifecycle is the user's concern, not yours.
+  Wait for the user's explicit confirmation. Server lifecycle is the user's concern, not yours.
 
 ### 3. Prepare the run directory
 
@@ -67,20 +69,27 @@ Rules:
   ```
 - Stable selectors only: `getByRole`, `getByLabel`, `getByText`, `getByTestId`. Never `nth-child` / `nth-of-type` / CSS positional selectors.
 - Wait for `networkidle` or a specific element. Forbidden: `page.waitForTimeout(<number>)` with arbitrary delays.
-- If the feature is behind auth, read the project root `CLAUDE.md` and `.swarm-test/memory/` for test credentials. If none, ask the user — do not invent.
+- If the feature is behind auth, follow the **Handling authentication** section below before writing the spec.
 
 The spec should be **3-8 steps**. If you're writing 15 steps, you're testing too much — focus on the user journey for the change.
 
 ### 5. Execute
 
+Run the spec directly with Playwright's CLI. From the project root that has Playwright installed:
+
 ```bash
-node $CLAUDE_PROJECT_DIR/.claude/skills/swarm-test/scripts/run-spec.js .swarm-test/runs/<ts>/feature.spec.ts
+npx playwright test .swarm-test/runs/<ts>/feature.spec.ts --reporter=line
 ```
 
-It returns JSON with exit code, stdout, stderr. If a step fails:
+Capture the exit code and the stdout — Playwright reports per-step pass/fail and timings.
+
+If a step fails:
 - **Retry once** with a corrected selector or a more specific wait condition.
 - Never modify the application source code from this skill.
 - If it still fails, capture the failure and continue analysis with whatever screenshots exist.
+
+If `npx playwright` is not installed in the project, tell the user:
+> Playwright is not installed. Run `pnpm add -D @playwright/test && npx playwright install chromium` then say "go".
 
 ### 6. Visually analyze the screenshots
 
@@ -129,6 +138,53 @@ After you report, the user may confirm or dismiss findings:
 - **Dismisses a finding** ("nah that's intentional") → append to `.swarm-test/memory/known-false-positives.md` describing the pattern, so future runs skip it.
 
 Keep entries short (one line each, with date prefix). Don't accumulate noise.
+
+## Handling authentication
+
+Many apps gate the feature you just shipped behind auth (OIDC, magic links, OAuth, Authentik, NextAuth…). Going through a real OIDC flow from a Playwright spec is fragile. Strategies in order of preference:
+
+### Strategy A — reuse a pre-authenticated browser session (best)
+
+Ask the user to open the app in Chrome, sign in once with their real account, then export storage state:
+
+1. Tell the user to run this one-time command to capture their session (point them to the right URL):
+   ```bash
+   npx playwright open --save-storage=.swarm-test/auth/storage.json http://localhost:3000
+   ```
+   They sign in in the launched browser, then close it. The cookies/localStorage are saved.
+2. In your spec, load that state:
+   ```ts
+   test.use({ storageState: '.swarm-test/auth/storage.json' });
+   ```
+
+The `.swarm-test/auth/` directory MUST be in `.gitignore`. The skill auto-adds it on first use:
+```bash
+grep -q '^\.swarm-test/auth/' .gitignore || echo '.swarm-test/auth/' >> .gitignore
+```
+
+If the saved state is older than a few hours (sessions expire), ask the user to refresh it.
+
+### Strategy B — programmatic test credentials
+
+Look for test credentials in:
+1. The project root `CLAUDE.md` (look for a "Test accounts" or "Test credentials" section)
+2. `.swarm-test/memory/learned-rules.md`
+3. `.env.test` or `.env.local` in the project
+
+If found, hardcode the flow in the spec (`getByLabel('Email').fill(...)` etc.). Never log the password to stdout.
+
+If no credentials are documented, ASK the user. Do not invent credentials.
+
+### Strategy C — bypass the auth wall
+
+If the feature is reachable via a public route or behind a feature flag, ask the user if the test should hit it directly (e.g. with a magic query param like `?test_mode=1`). Only do this if the user explicitly says it's safe.
+
+### When all else fails
+
+If auth can't be solved in this run, write the spec anyway but stop at the login screen. Take a screenshot of the login page. Tell the user:
+> The spec gets to the login screen but can't go further without test credentials or a saved session. Choose strategy A or B from the swarm-test skill and re-run.
+
+This is still useful: you've validated that the entry route renders, you've captured the login UI for visual review, and you've not wasted a long Playwright run on a flow that was always going to fail.
 
 ## Anti-patterns — don't do these
 
