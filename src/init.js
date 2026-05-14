@@ -7,6 +7,7 @@ import ora from 'ora';
 import {
   paths, PROJECT_ROOT, PACKAGE_ROOT,
   ensureDir, readJson, writeJson, writeText, readText,
+  detectPackageManager, collectClaudeMdAncestors,
   log, ok, warn, checkClaudeCLI,
 } from './utils.js';
 
@@ -222,14 +223,17 @@ export async function init() {
   const recent = recentGitLog();
 
   const pkg = readJson(join(PROJECT_ROOT, 'package.json'), {});
-  const devScript = (pkg.scripts || {}).dev || null;
+  const devScriptName = (pkg.scripts || {}).dev ? 'dev' : null;
+  const pm = detectPackageManager(PROJECT_ROOT);
+  const devCommand = devScriptName ? `${pm} run ${devScriptName}` : null;
 
   const config = {
     project_name: basename(PROJECT_ROOT),
     framework: framework.name,
     framework_version: framework.version || null,
     target_url: targetUrl,
-    dev_script: devScript,
+    package_manager: pm,
+    dev_script: devCommand,
     dev_port: port,
     routes: routes.map(r => r.route),
     flows: flows.map(f => f.name),
@@ -304,7 +308,16 @@ export async function init() {
 
   console.log('');
   ok(`Detected: framework ${chalk.bold(config.framework)}, ${chalk.bold(flows.length)} critical flows, target ${chalk.bold(targetUrl)}.`);
-  log(`Edit ${chalk.cyan('.swarm-test/CLAUDE.md')} with your business rules, refine ${chalk.cyan('.swarm-test/flows/*.md')}.`);
+  ok(`Package manager: ${chalk.bold(pm)}, dev: ${chalk.bold(devCommand || '(none)')}`);
+
+  const ancestorClaudes = collectClaudeMdAncestors(PROJECT_ROOT)
+    .filter(p => p !== paths.claudeMd);
+  if (ancestorClaudes.length > 0) {
+    ok(`Will inherit context from ${ancestorClaudes.length} ancestor CLAUDE.md file(s):`);
+    for (const p of ancestorClaudes) log(`  ${chalk.dim(p)}`);
+  }
+
+  log(`Edit ${chalk.cyan('.swarm-test/CLAUDE.md')} for swarm-specific overrides, refine ${chalk.cyan('.swarm-test/flows/*.md')}.`);
   log(`Local dev loop: ${chalk.cyan('swarm-test dev')} (auto-start dev server + test impacted flows only).`);
   log(`Full review: ${chalk.cyan('swarm-test run')}.`);
 }

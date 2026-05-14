@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import ora from 'ora';
 import {
   paths, ensureDir, loadConfig, loadAgentPrompt,
-  readJson, writeJson, readText,
+  readJson, writeJson, readText, buildProjectContext,
   gitInfo, log, ok, warn, err, checkClaudeCLI,
 } from './utils.js';
 import { runAgent } from './claude.js';
@@ -17,7 +17,7 @@ function fmtDuration(ms) {
 
 async function runE2E({ flow, config, runId, runDir }) {
   const flowSpec = readText(join(paths.flows, `${flow}.md`));
-  const claudeMd = readText(paths.claudeMd);
+  const claudeMd = buildProjectContext();
   const learnedRules = readText(paths.learnedRules);
 
   const systemPrompt = loadAgentPrompt('e2e-agent');
@@ -58,7 +58,7 @@ async function runE2E({ flow, config, runId, runDir }) {
 
 async function runAnalyst({ flow, config, runId }) {
   const flowSpec = readText(join(paths.flows, `${flow}.md`));
-  const claudeMd = readText(paths.claudeMd);
+  const claudeMd = buildProjectContext();
   const learnedRules = readText(paths.learnedRules);
   const fp = readJson(paths.falsePositives, { patterns: [] });
   const confirmed = readJson(paths.confirmedPatterns, { patterns: [] });
@@ -120,7 +120,7 @@ function captureGoldens(currentRoot) {
 }
 
 async function runRegression({ config, runId }) {
-  const claudeMd = readText(paths.claudeMd);
+  const claudeMd = buildProjectContext();
   const currentRoot = join(paths.screenshots, runId);
   const goldensExist = existsSync(paths.goldens) && readdirSync(paths.goldens).length > 0;
 

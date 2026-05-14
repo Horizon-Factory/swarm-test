@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { dirname, join, resolve } from 'path';
+import { dirname, join, resolve, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
+import { homedir } from 'os';
 import chalk from 'chalk';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -93,6 +94,57 @@ export function gitInfo() {
   } catch {
     return { branch: 'unknown', commit: 'unknown' };
   }
+}
+
+export function detectPackageManager(startDir = PROJECT_ROOT) {
+  let dir = startDir;
+  const stop = homedir();
+  while (true) {
+    const pkgPath = join(dir, 'package.json');
+    if (existsSync(pkgPath)) {
+      const pkg = readJson(pkgPath, {});
+      if (pkg.packageManager) {
+        return pkg.packageManager.split('@')[0];
+      }
+    }
+    if (existsSync(join(dir, 'pnpm-lock.yaml'))) return 'pnpm';
+    if (existsSync(join(dir, 'yarn.lock')))      return 'yarn';
+    if (existsSync(join(dir, 'bun.lockb')))      return 'bun';
+    if (existsSync(join(dir, 'package-lock.json'))) return 'npm';
+    if (dir === stop || dir === '/' || !dir) break;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return 'npm';
+}
+
+export function collectClaudeMdAncestors(startDir = PROJECT_ROOT) {
+  const found = [];
+  const stop = homedir();
+  let dir = startDir;
+  while (true) {
+    const f = join(dir, 'CLAUDE.md');
+    if (existsSync(f) && !found.includes(f)) found.unshift(f);
+    if (dir === stop || dir === '/' || !dir) break;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return found;
+}
+
+export function buildProjectContext() {
+  const ancestors = collectClaudeMdAncestors(PROJECT_ROOT);
+  const parts = [];
+  for (const f of ancestors) {
+    if (f === paths.claudeMd) continue;
+    const rel = relative(PROJECT_ROOT, f) || f;
+    parts.push(`<!-- file: ${rel} -->\n${readText(f)}`);
+  }
+  const swarmCtx = readText(paths.claudeMd, '');
+  if (swarmCtx) parts.push(`<!-- file: .swarm-test/CLAUDE.md (swarm-specific) -->\n${swarmCtx}`);
+  return parts.join('\n\n---\n\n');
 }
 
 export function log(msg)  { console.log(chalk.cyan('›'), msg); }
