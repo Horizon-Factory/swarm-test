@@ -1,0 +1,37 @@
+# Flow · {{FLOW_NAME}}
+
+## Objective
+
+_What is the user trying to accomplish in this flow? One sentence._
+
+## Preconditions
+
+- Logged in: _yes / no_
+- Required test data: _e.g. a non-empty cart, an existing draft order_
+- Permissions / role: _e.g. admin, regular customer_
+
+## Entry routes
+
+{{ENTRY_ROUTES}}
+
+## Steps
+
+_Describe the user journey step by step. The e2e-agent uses this to generate a Playwright spec. Be specific about expected UI state, not implementation details._
+
+1. _User lands on the entry page._
+2. _User clicks "Start"._
+3. _User fills the form with the test data above._
+4. _User submits._
+5. _Confirmation is displayed._
+
+## Success criteria
+
+- _What must be true at the end for the flow to be a success._
+
+## Test data
+
+- _Inputs to use._
+
+## Source files (auto-detected, used by `swarm-test diff`)
+
+{{SOURCES}}

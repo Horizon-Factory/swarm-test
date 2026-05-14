@@ -1,0 +1,33 @@
+{
+  "name": "swarm-test",
+  "version": "1.0.0",
+  "description": "Autonomous multi-agent testing swarm for web apps powered by Claude",
+  "type": "module",
+  "bin": {
+    "swarm-test": "./bin/swarm-test.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "agents/",
+    "templates/"
+  ],
+  "scripts": {
+    "start": "node ./bin/swarm-test.js"
+  },
+  "keywords": ["testing", "playwright", "claude", "agents", "swarm", "e2e"],
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^11.1.0",
+    "glob": "^10.3.10",
+    "ora": "^7.0.1",
+    "uuid": "^9.0.1"
+  },
+  "peerDependencies": {
+    "@playwright/test": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
