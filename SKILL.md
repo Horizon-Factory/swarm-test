@@ -134,7 +134,9 @@ Severity scale for visual findings:
 
 ### 8. Generate the visual report
 
-After the terminal summary, write a self-contained HTML report so the user can browse the screenshots and findings visually. Write it to `.swarm-test/runs/<ts>/report.html` using exactly this structure (substitute the placeholders, do NOT add external CSS/JS, do NOT pull from CDNs — must work offline via `file://`):
+After the terminal summary, write a self-contained HTML report so the user can verify, **step by step**, exactly what you tested. The report is a chronological timeline: one block per step, each block showing the action you performed, the screenshot you captured, and the findings tied to that specific step — all together so nothing has to be cross-referenced.
+
+Write it to `.swarm-test/runs/<ts>/report.html` using exactly this structure (substitute the placeholders, no external CSS/JS, no CDNs — must work offline via `file://`):
 
 ```html
 <!DOCTYPE html>
@@ -146,30 +148,36 @@ After the terminal summary, write a self-contained HTML report so the user can b
 <style>
 :root{--bg:#0d1117;--panel:#161b22;--panel2:#1f2630;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--green:#3fb950;--yellow:#d29922;--red:#f85149;--orange:#db6d28;--accent:#58a6ff}
 *{box-sizing:border-box}html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
-.wrap{max-width:1200px;margin:0 auto;padding:24px}
-header{padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:24px}
+.wrap{max-width:980px;margin:0 auto;padding:24px}
+header{padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:20px}
 h1{font-size:18px;margin:0 0 4px}.sub{color:var(--dim);font-size:13px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px}
-.kpi{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:28px}
+.kpi{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px}
 .kpi-l{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
 .kpi-v{font-size:22px;font-weight:600}.kpi.ok .kpi-v{color:var(--green)}.kpi.warn .kpi-v{color:var(--yellow)}.kpi.bad .kpi-v{color:var(--red)}
-section{margin-bottom:32px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:0 0 12px}
-.finding{background:var(--panel);border-left:3px solid var(--yellow);border-radius:4px;padding:12px 16px;margin-bottom:8px}
+.timeline{position:relative;margin-left:14px;padding-left:28px;border-left:2px solid var(--border)}
+.step{position:relative;margin-bottom:28px}
+.step::before{content:'';position:absolute;left:-37px;top:2px;width:14px;height:14px;border-radius:50%;border:3px solid var(--bg);background:var(--dim)}
+.step.ok::before{background:var(--green)}.step.warn::before{background:var(--yellow)}.step.bad::before{background:var(--red)}
+.step-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.step-n{font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
+.step-title{font-weight:600;font-size:15px}
+.tag{margin-left:auto;font-size:10px;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;background:var(--border);color:var(--dim)}
+.tag.ok{background:var(--green);color:#000}.tag.warn{background:var(--orange);color:#fff}.tag.bad{background:var(--red);color:#fff}
+.step-action{color:var(--dim);font-size:13px;margin-bottom:10px}
+.step-action b{color:var(--text);font-weight:500}
+.shot{width:100%;display:block;border:1px solid var(--border);border-radius:8px;background:var(--panel2);cursor:zoom-in}
+.no-shot{padding:16px;border:1px dashed var(--border);border-radius:8px;color:var(--dim);font-size:13px;text-align:center}
+.finding{background:var(--panel);border-left:3px solid var(--yellow);border-radius:4px;padding:10px 14px;margin-top:10px;font-size:13px}
 .finding.bad{border-left-color:var(--red)}.finding.warn{border-left-color:var(--orange)}.finding.ok{border-left-color:var(--green)}
-.f-head{display:flex;gap:8px;align-items:center;margin-bottom:6px}
-.badge{font-size:10px;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.04em;background:var(--border);color:var(--dim)}
-.badge.bad{background:var(--red);color:#fff}.badge.warn{background:var(--orange);color:#fff}.badge.ok{background:var(--green);color:#000}
-.steps{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
-.step{background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:zoom-in}
-.step img{width:100%;display:block;border-bottom:1px solid var(--border);background:var(--panel2)}
-.step-meta{padding:10px 12px}.step-label{font-weight:500}.step-note{color:var(--dim);font-size:12px;margin-top:2px}
-.step-status{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
-.step-status.ok{background:var(--green)}.step-status.warn{background:var(--yellow)}.step-status.bad{background:var(--red)}
-.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:100;cursor:zoom-out}
-.lightbox.on{display:flex}.lightbox img{max-width:95%;max-height:95%;border:1px solid var(--border);border-radius:4px}
+.finding .lbl{display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.04em;margin-right:8px;background:var(--border);color:var(--dim);vertical-align:middle}
+.finding.bad .lbl{background:var(--red);color:#fff}.finding.warn .lbl{background:var(--orange);color:#fff}.finding.ok .lbl{background:var(--green);color:#000}
+.finding .sugg{color:var(--dim);font-size:12px;margin-top:4px}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:28px 0 12px}
+.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;z-index:100;cursor:zoom-out}
+.lightbox.on{display:flex}.lightbox img{max-width:96%;max-height:96%;border:1px solid var(--border);border-radius:4px}
 footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--border);color:var(--dim);font-size:12px}
 code{background:var(--panel2);padding:2px 5px;border-radius:3px;font-size:12px;color:var(--text)}
-a{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -179,22 +187,19 @@ a{color:var(--accent)}
     <div class="sub">{{TIMESTAMP}} · {{TARGET_URL}} · run {{RUN_TS}}</div>
   </header>
 
-  <section class="kpis">
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-l">Steps</div><div class="kpi-v">{{STEP_COUNT}}</div></div>
     <div class="kpi ok"><div class="kpi-l">OK</div><div class="kpi-v">{{OK_COUNT}}</div></div>
     <div class="kpi warn"><div class="kpi-l">Friction</div><div class="kpi-v">{{WARN_COUNT}}</div></div>
     <div class="kpi bad"><div class="kpi-l">Broken</div><div class="kpi-v">{{BAD_COUNT}}</div></div>
-    <div class="kpi"><div class="kpi-l">Playwright</div><div class="kpi-v" style="font-size:16px">{{PW_STATUS}}</div></div>
-  </section>
+    <div class="kpi"><div class="kpi-l">Playwright</div><div class="kpi-v" style="font-size:15px">{{PW_STATUS}}</div></div>
+  </div>
 
-  <section>
-    <h2>Findings</h2>
-    {{FINDINGS_HTML}}
-  </section>
+  <div class="timeline">
+    {{STEPS_HTML}}
+  </div>
 
-  <section>
-    <h2>Screenshots</h2>
-    <div class="steps">{{SCREENSHOTS_HTML}}</div>
-  </section>
+  {{GENERAL_FINDINGS_BLOCK}}
 
   <footer>
     <div>Spec: <code>{{SPEC_PATH}}</code></div>
@@ -204,8 +209,8 @@ a{color:var(--accent)}
 
 <div class="lightbox" id="lb" onclick="this.classList.remove('on')"><img id="lbi" src=""></div>
 <script>
-document.querySelectorAll('.step img').forEach(img=>{
-  img.parentElement.addEventListener('click',()=>{document.getElementById('lbi').src=img.src;document.getElementById('lb').classList.add('on')})
+document.querySelectorAll('.shot').forEach(img=>{
+  img.addEventListener('click',()=>{document.getElementById('lbi').src=img.getAttribute('src');document.getElementById('lb').classList.add('on')})
 });
 </script>
 </body>
@@ -215,29 +220,48 @@ document.querySelectorAll('.step img').forEach(img=>{
 Substitutions:
 
 - `{{FEATURE_TITLE}}` — one-line description of what was tested
-- `{{TIMESTAMP}}` — human date (`2026-05-14 20:00`)
+- `{{TIMESTAMP}}` — human date (`2026-05-16 14:20`)
 - `{{RUN_TS}}` — the ISO timestamp of the run dir
 - `{{TARGET_URL}}`
+- `{{STEP_COUNT}}` — total number of steps
 - `{{OK_COUNT}}`, `{{WARN_COUNT}}`, `{{BAD_COUNT}}` — counts of findings by severity
 - `{{PW_STATUS}}` — e.g. `2/3 passed`
 - `{{SPEC_PATH}}` — relative path to the spec file
-- `{{FINDINGS_HTML}}` — concatenated `<div class="finding ok|warn|bad">…</div>` blocks, one per finding. Template per finding:
+- `{{STEPS_HTML}}` — the heart of the report: one `<div class="step …">` per step, **in execution order**. For every step you must fill all three parts (action, screenshot, findings) so the user can verify without cross-referencing. Per-step template:
+
   ```html
-  <div class="finding <ok|warn|bad>">
-    <div class="f-head"><span class="badge <ok|warn|bad>"><label></span></div>
-    <div><strong>step-label</strong> — factual constat (quote visible text if relevant)</div>
-    <div style="color:var(--dim);font-size:12px;margin-top:4px">Suggestion: …</div>
-  </div>
-  ```
-- `{{SCREENSHOTS_HTML}}` — concatenated `<div class="step">…</div>` blocks, one per screenshot, in order. Template per step (image path is RELATIVE to the report file — both live in the same run dir, so just use the filename):
-  ```html
-  <div class="step">
-    <img src="01-navigate.png" alt="01-navigate">
-    <div class="step-meta">
-      <div class="step-label"><span class="step-status <ok|warn|bad>"></span>01-navigate</div>
-      <div class="step-note">optional one-line observation</div>
+  <div class="step <ok|warn|bad>">
+    <div class="step-head">
+      <span class="step-n">Step 01</span>
+      <span class="step-title">Navigate to /pricing</span>
+      <span class="tag <ok|warn|bad>"><passed | friction | broken></span>
+    </div>
+    <div class="step-action">
+      <b>Action:</b> what you actually did in this step (the click/fill/navigation), in plain language.<br>
+      <b>Expected:</b> what should happen. <b>Observed:</b> what the screenshot shows.
+    </div>
+    <img class="shot" src="01-navigate.png" alt="Step 01">
+    <!-- if no screenshot exists for this step: -->
+    <!-- <div class="no-shot">No screenshot — step did not execute (blocked at step N)</div> -->
+    <!-- zero or more findings tied to THIS step: -->
+    <div class="finding <ok|warn|bad>">
+      <span class="lbl"><wording|ux|business|dead-end|error|missing-info></span>
+      Factual observation, quote visible text from the screenshot when relevant.
+      <div class="sugg">Suggestion: concrete fix.</div>
     </div>
   </div>
+  ```
+
+  Rules for `{{STEPS_HTML}}`:
+  - The image `src` is just the filename (report and screenshots share the run dir).
+  - The step's severity class = the worst finding on it (`bad` > `warn` > `ok`). No findings = `ok`.
+  - Always include the **Action / Expected / Observed** line, even when the step passed cleanly — that's what makes the run verifiable.
+  - If a step failed to execute (blocked earlier), still emit the block with the `no-shot` div and a one-line reason.
+
+- `{{GENERAL_FINDINGS_BLOCK}}` — only for findings NOT tied to a specific step (e.g. cross-cutting business-rule observations). If there are none, substitute an empty string. Otherwise:
+  ```html
+  <h2>General findings</h2>
+  <div class="finding warn"><span class="lbl">business</span> … <div class="sugg">Suggestion: …</div></div>
   ```
 
 Then open it:
