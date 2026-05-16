@@ -50,13 +50,15 @@ After you code a feature with Claude, say "lance le swarm" / "teste ce qu'on vie
 
 ## Authentication
 
-If the feature is behind auth (OIDC, Authentik, NextAuth…), the skill prefers reusing a saved browser session:
+If the feature is behind auth, the skill prefers reusing a saved browser session. This is **auth-agnostic** — `storageState` snapshots cookies + localStorage for the app origin, which covers virtually every scheme: server-side sessions, JWT-in-cookie, token-in-localStorage, OAuth/OIDC (Auth0, Keycloak, Authentik, Okta…), NextAuth, SAML.
 
 ```bash
 npx playwright open --save-storage=.swarm-test/auth/storage.json <your-dev-url>
 ```
 
-Sign in once in the launched browser, close it. The skill loads that state in its specs. `.swarm-test/auth/` is auto-gitignored so your session never gets committed. Full details and fallbacks are in `SKILL.md` → "Handling authentication".
+Sign in once in the launched browser, close it. The skill loads that state in its specs. `.swarm-test/auth/` is auto-gitignored so your (per-person) session never gets committed.
+
+Doesn't cover: sessions stored in IndexedDB (e.g. Firebase Auth), short-lived tokens (re-capture often), IP/device-bound sessions, client-TLS-cert auth. Fallbacks for those are in `SKILL.md` → "Handling authentication".
 
 ## Prerequisites
 

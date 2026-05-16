@@ -299,28 +299,34 @@ Keep entries short (one line each, with date prefix). Don't accumulate noise.
 
 ## Handling authentication
 
-Many apps gate the feature you just shipped behind auth (OIDC, magic links, OAuth, Authentik, NextAuth…). Going through a real OIDC flow from a Playwright spec is fragile. Strategies in order of preference:
+Many apps gate the feature you just shipped behind auth. Driving a full sign-in flow from a Playwright spec is fragile. Strategies in order of preference:
 
 ### Strategy A — reuse a pre-authenticated browser session (best)
 
-Ask the user to open the app in Chrome, sign in once with their real account, then export storage state:
+This is **auth-agnostic**. `storageState` snapshots the browser's cookies + localStorage for the app's origin — that's where almost every auth scheme persists the session. It works regardless of the provider: classic server-side sessions (Rails/Django/Express-session), JWT-in-cookie, JWT/token in localStorage, OAuth/OIDC (Auth0, Keycloak, Authentik, Okta, Google…), NextAuth, SAML. Whatever the login mechanism, the end result is a session in the browser on the app domain — that's what gets captured.
 
-1. Tell the user to run this one-time command to capture their session (point them to the right URL):
+Ask the user to sign in once and export the state:
+
+1. One-time command (point them to the right dev URL):
    ```bash
-   npx playwright open --save-storage=.swarm-test/auth/storage.json http://localhost:3000
+   npx playwright open --save-storage=.swarm-test/auth/storage.json <dev-url>
    ```
-   They sign in in the launched browser, then close it. The cookies/localStorage are saved.
+   They sign in in the launched browser however the app requires, then close it. Cookies + localStorage are saved.
 2. In your spec, load that state:
    ```ts
    test.use({ storageState: '.swarm-test/auth/storage.json' });
    ```
 
-The `.swarm-test/auth/` directory MUST be in `.gitignore`. The skill auto-adds it on first use:
+The `.swarm-test/auth/` directory MUST be gitignored (the session is per-person and sensitive). The skill auto-adds it on first use:
 ```bash
 grep -q '^\.swarm-test/auth/' .gitignore || echo '.swarm-test/auth/' >> .gitignore
 ```
 
-If the saved state is older than a few hours (sessions expire), ask the user to refresh it.
+**Caveats where Strategy A is NOT enough** — fall back to Strategy B:
+- **Session stored in IndexedDB** (e.g. Firebase Auth). `storageState` captures cookies + localStorage only, NOT IndexedDB — the saved state won't carry the session. Use a programmatic login fixture instead.
+- **Short-lived tokens.** State goes stale fast; if it's older than a few hours, ask the user to re-capture.
+- **Session bound to IP / device fingerprint.** The backend may reject a replayed session.
+- **Client TLS certificate auth.** Not covered by storageState.
 
 ### Strategy B — programmatic test credentials
 
