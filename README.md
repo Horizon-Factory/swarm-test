@@ -18,7 +18,7 @@ pnpm add -D @playwright/test && npx playwright install chromium
 
 Then open a new Claude Code conversation in any web project, code something, and say:
 
-> lance le swarm
+> run the swarm
 
 That's it. There is no config file to set up.
 
@@ -38,7 +38,7 @@ Or run the bundled script from anywhere:
 
 ## What it does
 
-After you code a feature with Claude, say "lance le swarm" / "teste ce qu'on vient de faire" / "test the feature". Claude will:
+After you code a feature with Claude, say "run the swarm" / "test what we just did" / "test the feature" (the French triggers "lance le swarm" / "teste ce qu'on vient de faire" also work). Claude will:
 
 1. **Recap** what it just changed in this conversation.
 2. **Check** the dev server is up (it tells you the command to run if not — it never spawns a server behind your back).
