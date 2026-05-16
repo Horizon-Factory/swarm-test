@@ -65,4 +65,4 @@ check_prereqs || c_yellow "Some prerequisites are missing — fix them before ru
 
 echo
 c_dim "Per-project (once): pnpm add -D @playwright/test && npx playwright install chromium"
-c_dim "Then in Claude Code: code a feature, say \"lance le swarm\"."
+c_dim "Then in Claude Code: code a feature, say \"run the swarm\"."

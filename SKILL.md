@@ -1,6 +1,6 @@
 ---
 name: swarm-test
-description: Use when the user asks you to test, validate, verify, or smoke-check a feature they just implemented in this conversation. Triggers on phrases like "run the swarm", "test what we just did", "test the feature", "validate this", "check if it works in the browser", "swarm-test", "/swarm-test", and the French equivalents "lance le swarm", "lance les tests", "teste ce qu'on vient de faire" (kept as activation keywords). Generates and executes a focused Playwright spec against the local dev server based on what was just coded, captures screenshots, visually analyzes them for UX and business issues, and reports findings. Skip if the project has no web frontend or no dev server.
+description: Use when the user asks you to test, validate, verify, or smoke-check a feature they just implemented in this conversation. Triggers on phrases like "run the swarm", "run the swarm test", "test what we just did", "test this feature", "validate this", "smoke test this", "check if it works in the browser", "swarm-test", "/swarm-test". Generates and executes a focused Playwright spec against the local dev server based on what was just coded, captures screenshots, visually analyzes them for UX and business issues, and reports findings. Skip if the project has no web frontend or no dev server.
 ---
 
 # swarm-test: validate the feature you just shipped
