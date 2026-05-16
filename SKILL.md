@@ -17,6 +17,18 @@ If you cannot recall a concrete user-visible change from this conversation, STOP
 
 Follow these steps in order. Skip none. The numbered structure exists to keep you honest.
 
+### 0. Version check (best-effort, non-blocking)
+
+Run this once, ignore any error, never let it block the run:
+
+```bash
+D=~/.claude/skills/swarm-test; [ -d "$D/.git" ] && git -C "$D" fetch --quiet origin main 2>/dev/null && \
+  LOCAL=$(git -C "$D" rev-parse HEAD) && REMOTE=$(git -C "$D" rev-parse origin/main) && \
+  [ "$LOCAL" != "$REMOTE" ] && echo "OUTDATED" || echo "OK"
+```
+
+If it prints `OUTDATED`, mention to the user in one line: _"A newer swarm-test exists — run `~/.claude/skills/swarm-test/install.sh --update` when convenient."_ Then continue normally. If the path doesn't exist (skill installed elsewhere / vendored), skip silently.
+
 ### 1. Recap what you changed (output to user)
 
 In 3-5 lines, tell the user:

@@ -1,84 +1,82 @@
 # swarm-test
 
-A Claude Code **skill** that validates a feature you just coded by generating and running a targeted Playwright spec against your local dev server, then visually analyzing the screenshots for UX and business issues.
+A Claude Code **skill** that validates a feature you just coded — it generates and runs a focused Playwright spec against your local dev server, captures screenshots, visually analyzes them for UX and business issues, and produces a step-by-step HTML report.
 
-This is not a CLI or an npm package. It's a skill that Claude Code loads and follows when you ask it to test what you just shipped.
+It is not a CLI or an npm package. It's a skill Claude Code loads and follows when you ask it to test what you just shipped.
 
-## Install
+---
 
-For a single project:
+## Onboarding (new collaborator — 2 commands)
+
 ```bash
-mkdir -p .claude/skills
-cd .claude/skills
-git clone git@github.com:Horizon-Factory/swarm-test.git
+# 1. Install the skill (once, for all your projects)
+git clone https://github.com/Horizon-Factory/swarm-test.git ~/.claude/skills/swarm-test
+
+# 2. In the project you want to test, add Playwright (once per project)
+pnpm add -D @playwright/test && npx playwright install chromium
 ```
 
-For all projects (user-level):
+Then open a new Claude Code conversation in any web project, code something, and say:
+
+> lance le swarm
+
+That's it. There is no config file to set up.
+
+### Update later
+
 ```bash
-mkdir -p ~/.claude/skills
-cd ~/.claude/skills
-git clone git@github.com:Horizon-Factory/swarm-test.git
+cd ~/.claude/skills/swarm-test && git pull
 ```
 
-Restart Claude Code (or open a new conversation). The skill is auto-discovered via its `SKILL.md` frontmatter.
+Or run the bundled script from anywhere:
 
-## Prerequisites in the project under test
+```bash
+~/.claude/skills/swarm-test/install.sh --update
+```
 
-- `@playwright/test` installed:
-  ```bash
-  pnpm add -D @playwright/test
-  ```
-- Chromium downloaded:
-  ```bash
-  npx playwright install chromium
-  ```
-- A `dev` script in `package.json` that boots a local server.
+---
 
-## Usage
+## What it does
 
-After coding a feature with Claude, just say one of:
+After you code a feature with Claude, say "lance le swarm" / "teste ce qu'on vient de faire" / "test the feature". Claude will:
 
-- "lance le swarm"
-- "teste ce qu'on vient de faire"
-- "swarm-test"
-- "test the feature"
-- "validate this in the browser"
-
-Claude will:
-
-1. **Recap** what you just changed in the conversation.
-2. **Check** the dev server is up (it tells you what to run if not — it won't spawn a server behind your back).
+1. **Recap** what it just changed in this conversation.
+2. **Check** the dev server is up (it tells you the command to run if not — it never spawns a server behind your back).
 3. **Write** a focused Playwright spec at `.swarm-test/runs/<timestamp>/feature.spec.ts`.
 4. **Run** it via `npx playwright test`.
-5. **Read** every screenshot and analyze it for wording, UX, business rule, dead-end, and error-message issues.
-6. **Report** findings with severity (`✓ ok` / `⚠ friction` / `✗ broken`).
-7. **Learn** from your reactions — confirmed issues go to `.swarm-test/memory/learned-rules.md`, dismissals go to `.swarm-test/memory/known-false-positives.md`.
+5. **Read** every screenshot and analyze it for wording, UX, business-rule, dead-end, and error-message issues.
+6. **Report** a step-by-step HTML timeline (`.swarm-test/runs/<ts>/report.html`) — each step shows the action, screenshot, and findings together so the run is easy to verify.
+7. **Learn** from your reactions — confirmed issues go to `.swarm-test/memory/learned-rules.md`, dismissals to `.swarm-test/memory/known-false-positives.md`.
 
-## Why not a CLI?
+## Authentication
 
-The Claude that just coded your feature already knows what it did, why, and what should happen. A separate CLI would re-discover all that from scratch (parsing diffs, maintaining a flow catalog, etc.). A skill lets that same Claude orchestrate the test directly.
+If the feature is behind auth (OIDC, Authentik, NextAuth…), the skill prefers reusing a saved browser session:
 
-## Files in this skill
+```bash
+npx playwright open --save-storage=.swarm-test/auth/storage.json <your-dev-url>
+```
+
+Sign in once in the launched browser, close it. The skill loads that state in its specs. `.swarm-test/auth/` is auto-gitignored so your session never gets committed. Full details and fallbacks are in `SKILL.md` → "Handling authentication".
+
+## Prerequisites
+
+- Claude Code (`claude` CLI)
+- Node 18+
+- In the project under test: `@playwright/test` + a `dev` script in `package.json`
+
+## Files
 
 ```
 swarm-test/
-├── SKILL.md                # Workflow Claude follows
+├── SKILL.md                # The workflow Claude follows
 ├── README.md               # This file
+├── install.sh              # Clone/update helper + prerequisite check
 └── templates/
-    └── spec-template.ts    # Reference structure for a generated Playwright spec
+    └── spec-template.ts    # Reference structure for a generated spec
 ```
 
-All operational logic (server probing, spec execution, auth handling) is inlined as bash commands in `SKILL.md` — no external scripts to invoke. Keeps the skill path-independent across project-level and user-level installs.
-
-## Memory
-
-Two markdown files accumulate the project's learned testing knowledge — they live in the project under test, not in this skill:
-
-- `.swarm-test/memory/learned-rules.md` — confirmed business / UX rules
-- `.swarm-test/memory/known-false-positives.md` — patterns to ignore
-
-These are committed alongside the project, so the team's knowledge persists. The per-run artifacts (`.swarm-test/runs/`) are gitignored.
+All operational logic (server probing, spec execution, auth, the HTML report) is inlined in `SKILL.md` — no external scripts invoked at runtime, so the skill works regardless of where it's installed.
 
 ## License
 
-MIT — internal Horizon-Factory tool.
+MIT.
