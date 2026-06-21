@@ -4,6 +4,8 @@ A Claude Code **skill** that validates a feature you just coded — it generates
 
 It is not a CLI or an npm package. It's a skill Claude Code loads and follows when you ask it to test what you just shipped.
 
+This repo also ships a **sibling skill, `swarm-mobile`**, that runs the same loop against the **iOS Simulator / Android Emulator** using [Maestro](https://maestro.mobile.dev) instead of Playwright — for Flutter and native (Swift/Kotlin) apps. Same screenshot-per-step, visual analysis, and HTML timeline report. See [`swarm-mobile/SKILL.md`](swarm-mobile/SKILL.md). It runs from the Claude Code CLI **on your Mac** (iOS Simulator is macOS-only). Trigger it with _"swarm the simulator"_ / _"test this on the iPhone sim"_.
+
 ---
 
 ## Onboarding (new collaborator — 2 commands)
@@ -70,11 +72,15 @@ Doesn't cover: sessions stored in IndexedDB (e.g. Firebase Auth), short-lived to
 
 ```
 swarm-test/
-├── SKILL.md                # The workflow Claude follows
+├── SKILL.md                # The web workflow Claude follows (Playwright)
 ├── README.md               # This file
-├── install.sh              # Clone/update helper + prerequisite check
-└── templates/
-    └── spec-template.ts    # Reference structure for a generated spec
+├── install.sh              # Clone/update helper + prerequisite check (links swarm-mobile too)
+├── templates/
+│   └── spec-template.ts    # Reference structure for a generated Playwright spec
+└── swarm-mobile/           # Sibling skill: iOS Simulator / Android Emulator (Maestro)
+    ├── SKILL.md            # The mobile workflow Claude follows
+    └── templates/
+        └── flow-template.yaml  # Reference structure for a generated Maestro flow
 ```
 
 All operational logic (server probing, spec execution, auth, the HTML report) is inlined in `SKILL.md` — no external scripts invoked at runtime, so the skill works regardless of where it's installed.
