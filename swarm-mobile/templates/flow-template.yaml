@@ -1,0 +1,41 @@
+# Reference template for a swarm-mobile Maestro flow.
+# The skill adapts this to whatever the user just coded — it is NOT loaded
+# at runtime, it's a structural reminder for the Claude that writes flows.
+#
+# Conventions enforced by SKILL.md:
+# - appId is the real bundle id / package (read from the project, don't guess).
+# - One screenshot per meaningful step: takeScreenshot: ${SHOTDIR}/NN-label
+#   (Maestro appends .png). SHOTDIR is injected at run time:
+#     maestro test feature.flow.yaml -e SHOTDIR="$(pwd)/.swarm-mobile/runs/<ts>"
+# - Stable selectors only: id (accessibilityIdentifier / widget Key / testID),
+#   or a Semantics label. Last resort: visible text. Never raw coordinates.
+# - Wait on state (assertVisible / extendedWaitUntil), not arbitrary `- wait`.
+# - 3-8 steps, scoped to the change. Don't crawl the app.
+---
+appId: com.example.myapp        # ← real bundle id / package
+---
+# 01 — launch (do NOT clearState if relying on a warm, signed-in simulator)
+- launchApp
+- assertVisible: "Welcome"
+- takeScreenshot: ${SHOTDIR}/01-launch
+
+# 02 — trigger the feature you just changed
+- tapOn:
+    id: "startButton"           # accessibilityIdentifier / Key / testID
+- extendedWaitUntil:
+    visible: "Enter your email"
+    timeout: 10000
+- takeScreenshot: ${SHOTDIR}/02-open-feature
+
+# 03 — exercise an input (watch the keyboard in the screenshot)
+- tapOn:
+    id: "emailField"
+- inputText: "test@example.com"
+- hideKeyboard
+- takeScreenshot: ${SHOTDIR}/03-email-entered
+
+# 04 — verify the outcome
+- tapOn:
+    text: "Continue"
+- assertVisible: "You're all set"
+- takeScreenshot: ${SHOTDIR}/04-verify-outcome

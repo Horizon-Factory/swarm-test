@@ -59,10 +59,25 @@ else
   c_green "✓ swarm-test installed at $DEST"
 fi
 
+# Expose the sibling mobile skill (swarm-mobile) as its own skill dir so Claude
+# Code discovers it. It lives inside this repo; symlink it next to swarm-test.
+if [ -d "$DEST/swarm-mobile" ]; then
+  MOBILE_LINK="$(dirname "$DEST")/swarm-mobile"
+  if [ ! -e "$MOBILE_LINK" ]; then
+    ln -s "$DEST/swarm-mobile" "$MOBILE_LINK" && c_green "✓ swarm-mobile linked at $MOBILE_LINK"
+  elif [ -L "$MOBILE_LINK" ]; then
+    c_dim "swarm-mobile already linked at $MOBILE_LINK"
+  else
+    c_yellow "⚠ $MOBILE_LINK exists and is not a symlink — leaving it alone."
+  fi
+fi
+
 echo
 c_dim "Prerequisite check:"
 check_prereqs || c_yellow "Some prerequisites are missing — fix them before running the skill."
 
 echo
-c_dim "Per-project (once): pnpm add -D @playwright/test && npx playwright install chromium"
-c_dim "Then in Claude Code: code a feature, say \"run the swarm\"."
+c_dim "Web   — per-project (once): pnpm add -D @playwright/test && npx playwright install chromium"
+c_dim "         then: code a feature, say \"run the swarm\"."
+c_dim "Mobile — once (macOS): curl -Ls \"https://get.maestro.mobile.dev\" | bash   (needs Java 11+)"
+c_dim "         then, with a simulator/emulator booted: code a feature, say \"swarm the simulator\"."
