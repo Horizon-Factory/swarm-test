@@ -38,6 +38,47 @@ Or run the bundled script from anywhere:
 
 ---
 
+## Mobile setup (`swarm-mobile`)
+
+For testing **iOS Simulator / Android Emulator** instead of the browser. Runs from the Claude Code CLI **on macOS** (the iOS Simulator is macOS-only; Android also works).
+
+```bash
+# 1. Install the skills (once). install.sh links swarm-mobile next to swarm-test
+#    so Claude Code discovers it as its own skill.
+git clone https://github.com/Horizon-Factory/swarm-test.git ~/.claude/skills/swarm-test
+~/.claude/skills/swarm-test/install.sh
+
+# 2. Install Maestro (once, machine-wide). Needs Java 11+.
+curl -Ls "https://get.maestro.mobile.dev" | bash
+
+# 3. Boot a device before you run:
+#    iOS     — open -a Simulator   (or: xcrun simctl boot "iPhone 15")
+#    Android — start an AVD from Android Studio, or: emulator -avd <name>
+```
+
+Then, in a Claude Code conversation inside your **Flutter or native (Swift/Kotlin)** app, code something and say:
+
+> swarm the simulator
+
+Claude builds + installs your app onto the booted device, drives the flow with Maestro, and produces **the same HTML timeline report** as the web skill. There's no config file.
+
+**Mobile prerequisites**
+
+- macOS with **Xcode** (for iOS) and/or **Android Studio + an AVD** (for Android)
+- **Maestro** (`curl -Ls "https://get.maestro.mobile.dev" | bash`) and **Java 11+**
+- A built-able app: Flutter project (`flutter` on PATH) or a native Xcode/Gradle project
+- Your app's accessible elements should expose ids/labels — `accessibilityIdentifier` (Swift), widget `Key`/`Semantics(label:)` (Flutter) — so flows use stable selectors
+
+If `~/.claude/skills/swarm-mobile` didn't get linked (e.g. you copied the repo manually), create it yourself:
+
+```bash
+ln -s ~/.claude/skills/swarm-test/swarm-mobile ~/.claude/skills/swarm-mobile
+```
+
+See [`swarm-mobile/SKILL.md`](swarm-mobile/SKILL.md) for the full workflow, the mobile-specific visual checks, and native auth strategies.
+
+---
+
 ## What it does
 
 After you code a feature with Claude, say "run the swarm" / "test what we just did" / "test this feature". Claude will:
@@ -62,11 +103,13 @@ Sign in once in the launched browser, close it. The skill loads that state in it
 
 Doesn't cover: sessions stored in IndexedDB (e.g. Firebase Auth), short-lived tokens (re-capture often), IP/device-bound sessions, client-TLS-cert auth. Fallbacks for those are in `SKILL.md` → "Handling authentication".
 
-## Prerequisites
+## Prerequisites (web)
 
 - Claude Code (`claude` CLI)
 - Node 18+
 - In the project under test: `@playwright/test` + a `dev` script in `package.json`
+
+For mobile prerequisites, see [Mobile setup](#mobile-setup-swarm-mobile) above.
 
 ## Files
 
