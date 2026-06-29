@@ -1,6 +1,6 @@
 # swarm-test
 
-A Claude Code **skill** that validates a feature you just coded — it generates and runs a focused Playwright spec against your local dev server, captures screenshots, visually analyzes them for UX and business issues, and produces a step-by-step HTML report.
+A Claude Code **skill** that validates a feature you just coded. It plans **every case** for the feature (happy + edge + error + empty-state + modal-depth), shows you that plan, then fans out a **swarm of parallel agents** — each writes and runs its own focused Playwright spec against your local dev server, captures screenshots, and visually analyzes them for UX and business issues. Findings are merged into one step-by-step HTML report grouped by journey.
 
 It is not a CLI or an npm package. It's a skill Claude Code loads and follows when you ask it to test what you just shipped.
 
@@ -85,10 +85,10 @@ After you code a feature with Claude, say "run the swarm" / "test what we just d
 
 1. **Recap** what it just changed in this conversation.
 2. **Check** the dev server is up (it tells you the command to run if not — it never spawns a server behind your back).
-3. **Write** a focused Playwright spec at `.swarm-test/runs/<timestamp>/feature.spec.ts`.
-4. **Run** it via `npx playwright test`.
-5. **Read** every screenshot and analyze it for wording, UX, business-rule, dead-end, and error-message issues.
-6. **Report** a step-by-step HTML timeline (`.swarm-test/runs/<ts>/report.html`) — each step shows the action, screenshot, and findings together so the run is easy to verify.
+3. **Plan the case matrix** — enumerate every journey worth testing (happy, edge, error, empty-state, modal-depth) and **show it to you before running**. Reply "go" to swarm, edit the list, or say "swarm auto" to skip the confirm next time.
+4. **Fan out the swarm** — one parallel agent per journey, each writing and running its own focused Playwright spec in its own subdir under `.swarm-test/runs/<timestamp>/`, capturing a screenshot per step.
+5. **Analyze** — each agent reads its own screenshots and flags wording, UX, business-rule, dead-end, and error-message issues. Journeys that open modals/sub-flows are driven **inside** them, not just screenshotted.
+6. **Merge & report** — dedup findings across journeys and produce one step-by-step HTML timeline grouped by journey (`.swarm-test/runs/<ts>/report.html`), each step showing the action, screenshot, and findings together so the run is easy to verify.
 7. **Learn** from your reactions — confirmed issues go to `.swarm-test/memory/learned-rules.md`, dismissals to `.swarm-test/memory/known-false-positives.md`.
 
 ## Authentication
@@ -119,7 +119,10 @@ swarm-test/
 ├── README.md               # This file
 ├── install.sh              # Clone/update helper + prerequisite check (links swarm-mobile too)
 ├── templates/
-│   └── spec-template.ts    # Reference structure for a generated Playwright spec
+│   ├── spec-template.ts    # Reference structure for one journey's Playwright spec
+│   └── journey-brief.md    # Self-contained brief handed to each parallel swarm agent
+├── docs/
+│   └── swarm-v2-design.md  # Design record for the parallel-journey-swarm architecture
 └── swarm-mobile/           # Sibling skill: iOS Simulator / Android Emulator (Maestro)
     ├── SKILL.md            # The mobile workflow Claude follows
     └── templates/
