@@ -97,6 +97,7 @@ Rules for the plan:
 - **Default 3-6 journeys.** Pick the highest-value ones. Quality of coverage over raw count.
 - **No silent truncation.** If the feature is big enough to warrant more, cap it but say explicitly what you left out (e.g. _"Skipped i18n + mobile-viewport variants — say 'go deeper' to add them."_).
 - **Modal depth is mandatory**, not optional — if a journey touches a modal/sub-flow, its depth requirement must describe the interaction inside it.
+- **Flag mutating journeys.** Mark any journey that changes shared backend state (subscribe, cancel, delete, edit a setting); these need distinct data or serialization so parallel agents don't corrupt each other — see the shared-state note in phase 5.
 - **Stay feature-scoped.** Every journey exercises the thing you just changed. Never pad with unrelated routes.
 
 **Pause and wait for the user** unless they have already said "swarm auto" (or equivalent) — then show the plan and proceed without waiting. If the user trims, adds, or reorders, honor it. This pause is the "plan all cases before going" guarantee; do not skip it on the first run of a session.
@@ -167,6 +168,11 @@ Each subagent MUST:
 `severity` ∈ `ok | warn | bad`. `label` ∈ `wording | ux | business | dead-end | error | missing-info`.
 
 **Isolation:** agents are independent. If one agent's journey fails to run, the others continue — collect whatever each returns. A dead agent never aborts the swarm.
+
+**Shared backend state (important).** Parallel agents hit the SAME dev server and DB. Read-only journeys are safe to run together. Journeys that **mutate shared state** (subscribe, cancel, delete, change a setting) can corrupt each other's preconditions — e.g. a "subscribe" journey and an "already-subscribed" journey racing on the same account. At plan time, flag mutating journeys and pick one:
+- **Distinct data per journey** — give each its own account / record / test user (best; keeps full parallelism). Note it in the brief.
+- **Serialize the mutators** — run read-only and independent journeys in parallel, but run mutating journeys that share a resource one after another.
+- If neither is possible, say so in the plan and let the user decide.
 
 ### 6. Merge
 
