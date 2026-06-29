@@ -1,17 +1,21 @@
 // Reference template for a swarm-test Playwright spec.
-// The skill adapts this to whatever the user just coded — it is NOT loaded
-// at runtime, it's a structural reminder for the Claude that writes specs.
+// One spec = ONE journey, written by ONE swarm agent into its own subdir. It is NOT
+// loaded at runtime — it's a structural reminder for the agent that writes the spec.
 //
-// Conventions enforced by the SKILL.md:
+// Conventions enforced by the SKILL.md / journey brief:
 // - test.step('NN-label', ...) — NN must match the screenshot filename
 // - page.screenshot({ path: '...NN-label.png', fullPage: false }) at end of step
 // - Stable selectors only (getByRole, getByLabel, getByTestId, getByText)
 // - Waits target conditions (networkidle, visible element), never arbitrary delays
+// - Modal depth: if the journey opens a modal/dropdown/drawer, interact INSIDE it
 
 import { test, expect } from '@playwright/test';
 
-// SCREENSHOT_DIR is injected by the skill at the top of the generated spec:
-//   const SCREENSHOT_DIR = '<absolute path to .swarm-test/runs/<ts>/>'
+// If the journey is behind auth, load the shared session captured in phase 4:
+//   test.use({ storageState: '.swarm-test/auth/storage.json' });
+
+// SCREENSHOT_DIR is injected by the agent at the top of the generated spec — it points
+// at THIS journey's subdir, e.g. '<...>/.swarm-test/runs/<ts>/01-subscribe-happy/'
 declare const SCREENSHOT_DIR: string;
 
 test('feature: <one-line description of what was just shipped>', async ({ page }) => {

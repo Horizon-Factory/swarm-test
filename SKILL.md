@@ -1,21 +1,28 @@
 ---
 name: swarm-test
-description: Use when the user asks you to test, validate, verify, or smoke-check a feature they just implemented in this conversation. Triggers on phrases like "run the swarm", "run the swarm test", "test what we just did", "test this feature", "validate this", "smoke test this", "check if it works in the browser", "swarm-test", "/swarm-test". Generates and executes a focused Playwright spec against the local dev server based on what was just coded, captures screenshots, visually analyzes them for UX and business issues, and reports findings. Skip if the project has no web frontend or no dev server.
+description: Use when the user asks you to test, validate, verify, or smoke-check a feature they just implemented in this conversation. Triggers on phrases like "run the swarm", "run the swarm test", "test what we just did", "test this feature", "validate this", "smoke test this", "check if it works in the browser", "swarm-test", "/swarm-test". Plans ALL cases for the feature (happy + edge + error + empty-state + modal-depth), shows that plan, then fans out a swarm of parallel subagents — each writes and runs its own focused Playwright spec, captures screenshots, visually analyzes them for UX and business issues, and reports back. Findings are merged into one report. Skip if the project has no web frontend or no dev server.
 ---
 
-# swarm-test: validate the feature you just shipped
+# swarm-test: plan every case, then swarm it
 
-You just helped the user implement (or modify) a feature. Now you validate it end-to-end in a real browser. Your goal: catch bugs the user would only notice by clicking through the flow themselves.
+You just helped the user implement (or modify) a feature. Now you validate it end-to-end in a real browser — not with one happy-path click-through, but by planning **every case that matters** and running them as a swarm of parallel agents.
 
 ## Mental model
 
-You are NOT running a generic test suite. You are testing **the specific thing you just changed in this conversation**. Use the file edits, diffs, and intent you remember from earlier turns to focus the test on the right surface area.
+You are NOT running a generic test suite, and you are NOT writing one shallow happy-path spec. You are:
+
+1. **Planning all the cases** for the specific thing you just changed in this conversation — happy path, edges, errors, empty states, and the modal/sub-flow depth each one needs.
+2. **Showing that plan** to the user before spending tokens.
+3. **Swarming** — one parallel subagent per journey, each owning its journey end-to-end (spec → run → screenshots → visual analysis).
+4. **Merging** every agent's findings into one report.
+
+The planning happens in the main conversation because **you** have the context — the file edits, diffs, and intent from earlier turns. The subagents start fresh, so everything they need goes into their brief.
 
 If you cannot recall a concrete user-visible change from this conversation, STOP and ask the user what to test. Don't crawl the app at random.
 
 ## Workflow
 
-Follow these steps in order. Skip none. The numbered structure exists to keep you honest.
+Follow these phases in order. Skip none. The structure exists to keep you honest.
 
 ### 0. Version check (best-effort, non-blocking)
 
@@ -27,7 +34,7 @@ D=~/.claude/skills/swarm-test; [ -d "$D/.git" ] && git -C "$D" fetch --quiet ori
   [ "$LOCAL" != "$REMOTE" ] && echo "OUTDATED" || echo "OK"
 ```
 
-If it prints `OUTDATED`, mention to the user in one line: _"A newer swarm-test exists — run `~/.claude/skills/swarm-test/install.sh --update` when convenient."_ Then continue normally. If the path doesn't exist (skill installed elsewhere / vendored), skip silently.
+If it prints `OUTDATED`, mention in one line: _"A newer swarm-test exists — run `~/.claude/skills/swarm-test/install.sh --update` when convenient."_ Then continue. If the path doesn't exist (skill vendored elsewhere), skip silently.
 
 ### 1. Recap what you changed (output to user)
 
@@ -35,10 +42,8 @@ In 3-5 lines, tell the user:
 
 - Files touched in this conversation
 - Routes / pages / components affected
-- The user journey that should now work (or work differently)
+- The user journey(s) that should now work (or work differently)
 - Any auth / preconditions required to exercise it
-
-Confirm with the user if the journey is ambiguous. **Do not proceed silently** — they should see what you're about to test before you spend tokens running it.
 
 ### 2. Make sure the dev server is up
 
@@ -54,101 +59,141 @@ curl -fsS --max-time 3 http://localhost:<port>/ >/dev/null && echo READY || echo
 ```
 
 - **READY** → proceed.
-- **DOWN** → **do NOT spawn the server yourself.** Tell the user the exact command to run, derived from the detected package manager (look at the lockfile in the same directory or above: `pnpm-lock.yaml` → `pnpm`, `yarn.lock` → `yarn`, `bun.lockb` → `bun`, `package-lock.json` → `npm`; or read `packageManager` field in package.json). Example:
+- **DOWN** → **do NOT spawn the server yourself.** Tell the user the exact command, derived from the detected package manager (lockfile in the same dir or above: `pnpm-lock.yaml` → `pnpm`, `yarn.lock` → `yarn`, `bun.lockb` → `bun`, `package-lock.json` → `npm`; or `packageManager` in package.json):
 
   > Your dev server is not responding on http://localhost:3000. Run `pnpm run dev` from `/Users/.../apps/uca` in another terminal, wait for it to be ready, then say "go".
 
-  Wait for the user's explicit confirmation. Server lifecycle is the user's concern, not yours.
+  Wait for explicit confirmation. Server lifecycle is the user's concern.
 
-### 3. Prepare the run directory
-
-Create:
-```
-.swarm-test/runs/<ISO-timestamp>/
-```
-e.g. `.swarm-test/runs/2026-05-14T17-40-00/`. This is where the spec, screenshots, and any artifacts go for this run.
-
-### 4. Write a focused Playwright spec
-
-Write `.swarm-test/runs/<ts>/feature.spec.ts`. Use `templates/spec-template.ts` (in this skill dir) as a starting structure if helpful, but always adapt to the change at hand.
-
-Rules:
-- **Target the route(s) you just changed.** Never crawl random pages.
-- Use `test.step('NN-label', async () => { ... })` for every meaningful user action. The step label is also the screenshot filename, so use `01-`, `02-`, etc. for ordering.
-- Take a screenshot at the END of every step:
-  ```ts
-  await page.screenshot({ path: '<absolute path to .swarm-test/runs/<ts>/NN-label.png>', fullPage: false });
-  ```
-- Stable selectors only: `getByRole`, `getByLabel`, `getByText`, `getByTestId`. Never `nth-child` / `nth-of-type` / CSS positional selectors.
-- Wait for `networkidle` or a specific element. Forbidden: `page.waitForTimeout(<number>)` with arbitrary delays.
-- If the feature is behind auth, follow the **Handling authentication** section below before writing the spec.
-
-The spec should be **3-8 steps**. If you're writing 15 steps, you're testing too much — focus on the user journey for the change.
-
-### 5. Execute
-
-Run the spec directly with Playwright's CLI. From the project root that has Playwright installed:
-
-```bash
-npx playwright test .swarm-test/runs/<ts>/feature.spec.ts --reporter=line
-```
-
-Capture the exit code and the stdout — Playwright reports per-step pass/fail and timings.
-
-If a step fails:
-- **Retry once** with a corrected selector or a more specific wait condition.
-- Never modify the application source code from this skill.
-- If it still fails, capture the failure and continue analysis with whatever screenshots exist.
-
-If `npx playwright` is not installed in the project, tell the user:
+Also confirm Playwright is available — if `npx playwright test --version` fails, tell the user:
 > Playwright is not installed. Run `pnpm add -D @playwright/test && npx playwright install chromium` then say "go".
 
-### 6. Visually analyze the screenshots
+### 3. Plan the case matrix (the heart of the swarm) — then CONFIRM
 
-List `.swarm-test/runs/<ts>/*.png`. For every screenshot, use the Read tool (it returns images visually). For each one, ask yourself:
+This is where swarm-test earns its name. Using everything you know from this conversation, enumerate **every case that matters for the feature** — not just the happy path. Think across these journey types:
 
-1. **Wording vs action** — does visible copy match what's about to happen on click?
-2. **Step ordering** — is the journey logical, or does it feel arbitrary?
-3. **Business rules** — do the rules in the project root `CLAUDE.md` still hold at this screen?
-4. **Dead ends** — can the user always go back, retry, or get help?
-5. **Error messages** — actionable, or just "Something went wrong"?
-6. **Missing info** — does the user have enough info to make a decision (prices, terms, consequences)?
-7. **Inconsistencies** — does what's shown contradict the previous step?
+- **happy** — the primary path works end to end.
+- **edge** — boundary / variant states (already-subscribed user, max length, second visit, different role).
+- **error** — the path fails the way it should (declined card, validation error, network failure) and the UI recovers.
+- **empty-state** — no data / nothing configured yet; no dead ends.
+- **modal-deep** — a modal, dropdown, drawer, or expander opens; you go **inside** it and interact, not just screenshot the trigger.
+- **permission** — an unauthorized/unauthenticated user is handled correctly.
 
-Be specific. Quote visible text. Don't invent rules that aren't documented somewhere.
-
-Before flagging, check `.swarm-test/memory/known-false-positives.md` — if your finding matches a pattern listed there, drop it.
-
-### 7. Report
-
-Print a structured terminal-style summary to the user. Use a compact form:
+For each journey produce a row with: a numbered slug (`01-subscribe-happy`), title, type, auth precondition, and the **explicit depth requirement** (what must be interacted with inside any modal/sub-flow). Present it as a matrix:
 
 ```
-swarm-test — <feature description, 1 line>
+swarm-test plan — <feature, 1 line>   ·   target http://localhost:<port>
 
-Playwright: 5/5 steps passed
-Visual review:
-  ✓ /pricing renders correctly
-  ✓ Subscribe button opens the modal
-  ⚠ 03-modal-open: "Continuer" button is greyed out but no help text explains why
-  ✗ 04-stripe-iframe: iframe overflows on viewport < 1280px
+ #   Journey                  Type         Auth   Goes deep into
+ 01  Subscribe happy path     happy        yes    opens modal AND fills card, asserts confirmation
+ 02  Already-subscribed user  edge         yes    modal shows "Manage", not "Subscribe"
+ 03  Declined card            error        yes    inline error copy is actionable, retry works
+ 04  Empty pricing (no plans) empty-state  no     empty state renders, no dead end
 
-Artifacts:
-  Report: .swarm-test/runs/<ts>/report.html   (opens in browser)
-  Spec  : .swarm-test/runs/<ts>/feature.spec.ts
-  Shots : .swarm-test/runs/<ts>/*.png
+4 journeys → 4 parallel agents. Reply "go" to swarm, "swarm auto" to skip this confirm next time, or edit the list.
 ```
 
-Severity scale for visual findings:
-- ✗ **broken** — user blocked or business rule violated
-- ⚠ **friction** — works but degrades the experience
-- ✓ **ok**
+Rules for the plan:
+- **Default 3-6 journeys.** Pick the highest-value ones. Quality of coverage over raw count.
+- **No silent truncation.** If the feature is big enough to warrant more, cap it but say explicitly what you left out (e.g. _"Skipped i18n + mobile-viewport variants — say 'go deeper' to add them."_).
+- **Modal depth is mandatory**, not optional — if a journey touches a modal/sub-flow, its depth requirement must describe the interaction inside it.
+- **Stay feature-scoped.** Every journey exercises the thing you just changed. Never pad with unrelated routes.
 
-### 8. Generate the visual report
+**Pause and wait for the user** unless they have already said "swarm auto" (or equivalent) — then show the plan and proceed without waiting. If the user trims, adds, or reorders, honor it. This pause is the "plan all cases before going" guarantee; do not skip it on the first run of a session.
 
-After the terminal summary, write a self-contained HTML report so the user can verify, **step by step**, exactly what you tested. The report is a chronological timeline: one block per step, each block showing the action you performed, the screenshot you captured, and the findings tied to that specific step — all together so nothing has to be cross-referenced.
+### 4. Prepare the run directory
 
-Write it to `.swarm-test/runs/<ts>/report.html` using exactly this structure (substitute the placeholders, no external CSS/JS, no CDNs — must work offline via `file://`):
+Create one run dir, with a subdir per journey:
+
+```
+.swarm-test/runs/<ISO-timestamp>/            ← report.html lands here
+.swarm-test/runs/<ISO-timestamp>/01-subscribe-happy/    ← agent 1: spec + screenshots
+.swarm-test/runs/<ISO-timestamp>/02-already-subscribed/ ← agent 2
+...
+```
+
+e.g. `.swarm-test/runs/2026-06-29T17-40-00/`. Each journey gets its own subdir so parallel agents never collide on screenshot filenames. If the feature is behind auth, resolve the auth strategy now (see **Handling authentication**) so every agent can share the same `storageState`.
+
+### 5. Fan out the swarm
+
+Dispatch **one subagent per journey, in parallel** (one message, multiple agent calls — use the Task tool / your platform's parallel-subagent mechanism). Each subagent runs the SAME end-to-end loop on its own journey, isolated from the others.
+
+Because subagents have **none** of this conversation's context, give each a **self-contained brief**. Fill `templates/journey-brief.md` (in this skill dir) — it carries: target URL + exact route, the ordered steps with depth requirements, auth strategy + `storageState` path, the agent's own output subdir, the visual-analysis checklist, where business rules live (project `CLAUDE.md`), the known-false-positives file, and the structured return contract.
+
+Each subagent MUST:
+
+1. **Write its spec** to `<subdir>/journey.spec.ts`. Use `templates/spec-template.ts` as structure. Rules:
+   - Target only its journey's route(s). One journey, deeply — never crawl.
+   - `test.step('NN-label', …)` per meaningful action; the label is the screenshot filename (`01-`, `02-`, …).
+   - Screenshot at the END of every step: `await page.screenshot({ path: '<subdir>/NN-label.png', fullPage: false });`
+   - Stable selectors only (`getByRole`, `getByLabel`, `getByText`, `getByTestId`). Never `nth-child`/CSS positional.
+   - Wait for `networkidle` or a specific element. Never `page.waitForTimeout(<arbitrary>)`.
+   - **Modal depth:** if the journey opens a modal/dropdown/drawer, the spec must interact INSIDE it (fill fields, click the inner CTA, assert inner state) — not screenshot the trigger and stop.
+   - 3-8 steps. More than ~10 means the journey is too broad — it should have been split at plan time.
+2. **Run it:** `npx playwright test <subdir>/journey.spec.ts --reporter=line`. Capture exit code + stdout. If a step fails, retry ONCE with a corrected selector or wait; never edit application source; if it still fails, capture the failure and analyze whatever screenshots exist.
+3. **Visually analyze** its own screenshots — Read each `.png` (the Read tool returns images). For each, ask:
+   1. **Wording vs action** — does copy match what a click does?
+   2. **Step ordering** — logical, or arbitrary?
+   3. **Business rules** — do the rules in project `CLAUDE.md` still hold here?
+   4. **Dead ends** — can the user go back, retry, or get help?
+   5. **Error messages** — actionable, or "Something went wrong"?
+   6. **Missing info** — enough to decide (prices, terms, consequences)?
+   7. **Inconsistencies** — does this contradict the previous step?
+
+   Quote visible text. Don't invent undocumented rules. Drop any finding matching `.swarm-test/memory/known-false-positives.md`.
+4. **Return structured findings** (its final message IS the data, not prose) per the return contract below.
+
+**Return contract** — each agent returns exactly this shape:
+
+```json
+{
+  "journey": "01-subscribe-happy",
+  "title": "Subscribe happy path",
+  "type": "happy",
+  "playwright": { "passed": 5, "total": 5 },
+  "steps": [
+    { "n": "01", "label": "navigate-pricing", "action": "what you did",
+      "expected": "what should happen", "observed": "what the shot shows",
+      "shot": "01-navigate-pricing.png",
+      "findings": [
+        { "severity": "warn", "label": "missing-info",
+          "note": "quote the visible text", "fix": "concrete suggestion" }
+      ] }
+  ],
+  "general_findings": []
+}
+```
+
+`severity` ∈ `ok | warn | bad`. `label` ∈ `wording | ux | business | dead-end | error | missing-info`.
+
+**Isolation:** agents are independent. If one agent's journey fails to run, the others continue — collect whatever each returns. A dead agent never aborts the swarm.
+
+### 6. Merge
+
+Collect every agent's structured result. Then:
+
+- **Dedup across journeys.** If the same finding appears in multiple journeys, keep one and annotate it (_"seen in 3 journeys"_). Cross-cutting findings (a business-rule violation visible everywhere) go to general findings.
+- **Aggregate counts** across all journeys for the KPIs.
+- **Print a terminal matrix** — one row per journey:
+
+```
+swarm-test — <feature, 1 line>
+
+ #   Journey                  Playwright   Visual
+ 01  Subscribe happy path     5/5          ✓ ok
+ 02  Already-subscribed user  3/3          ⚠ 1 friction
+ 03  Declined card            4/4          ✗ 1 broken — error copy not actionable
+ 04  Empty pricing            2/2          ✓ ok
+
+Findings: 1 broken · 1 friction · deduped 2 repeats
+Report: .swarm-test/runs/<ts>/report.html
+```
+
+Severity scale: ✗ **broken** (user blocked / business rule violated) · ⚠ **friction** (works but degrades) · ✓ **ok**.
+
+### 7. Generate the visual report
+
+Write a self-contained `report.html` to `.swarm-test/runs/<ts>/report.html` — chronological, grouped **by journey**, so the user can verify exactly what each agent tested. No external CSS/JS, no CDNs; must work offline via `file://`.
 
 ```html
 <!DOCTYPE html>
@@ -163,13 +208,20 @@ Write it to `.swarm-test/runs/<ts>/report.html` using exactly this structure (su
 .wrap{max-width:980px;margin:0 auto;padding:24px}
 header{padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:20px}
 h1{font-size:18px;margin:0 0 4px}.sub{color:var(--dim);font-size:13px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:28px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:28px}
 .kpi{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px}
 .kpi-l{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
 .kpi-v{font-size:22px;font-weight:600}.kpi.ok .kpi-v{color:var(--green)}.kpi.warn .kpi-v{color:var(--yellow)}.kpi.bad .kpi-v{color:var(--red)}
-.timeline{position:relative;margin-left:14px;padding-left:28px;border-left:2px solid var(--border)}
-.step{position:relative;margin-bottom:28px}
-.step::before{content:'';position:absolute;left:-37px;top:2px;width:14px;height:14px;border-radius:50%;border:3px solid var(--bg);background:var(--dim)}
+.journey{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:18px}
+.journey-head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.journey-title{font-size:16px;font-weight:600}
+.jtype{font-size:10px;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;background:var(--panel2);color:var(--accent);border:1px solid var(--border)}
+.jstatus{margin-left:auto;font-size:11px;padding:2px 10px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;background:var(--border);color:var(--dim)}
+.jstatus.ok{background:var(--green);color:#000}.jstatus.warn{background:var(--orange);color:#fff}.jstatus.bad{background:var(--red);color:#fff}
+.journey-sub{color:var(--dim);font-size:12px;margin-bottom:16px}
+.timeline{position:relative;margin-left:6px;padding-left:24px;border-left:2px solid var(--border)}
+.step{position:relative;margin-bottom:24px}
+.step::before{content:'';position:absolute;left:-33px;top:2px;width:14px;height:14px;border-radius:50%;border:3px solid var(--panel);background:var(--dim)}
 .step.ok::before{background:var(--green)}.step.warn::before{background:var(--yellow)}.step.bad::before{background:var(--red)}
 .step-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
 .step-n{font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
@@ -180,11 +232,12 @@ h1{font-size:18px;margin:0 0 4px}.sub{color:var(--dim);font-size:13px}
 .step-action b{color:var(--text);font-weight:500}
 .shot{width:100%;display:block;border:1px solid var(--border);border-radius:8px;background:var(--panel2);cursor:zoom-in}
 .no-shot{padding:16px;border:1px dashed var(--border);border-radius:8px;color:var(--dim);font-size:13px;text-align:center}
-.finding{background:var(--panel);border-left:3px solid var(--yellow);border-radius:4px;padding:10px 14px;margin-top:10px;font-size:13px}
+.finding{background:var(--panel2);border-left:3px solid var(--yellow);border-radius:4px;padding:10px 14px;margin-top:10px;font-size:13px}
 .finding.bad{border-left-color:var(--red)}.finding.warn{border-left-color:var(--orange)}.finding.ok{border-left-color:var(--green)}
 .finding .lbl{display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.04em;margin-right:8px;background:var(--border);color:var(--dim);vertical-align:middle}
 .finding.bad .lbl{background:var(--red);color:#fff}.finding.warn .lbl{background:var(--orange);color:#fff}.finding.ok .lbl{background:var(--green);color:#000}
 .finding .sugg{color:var(--dim);font-size:12px;margin-top:4px}
+.finding .seen{color:var(--dim);font-size:11px;font-style:italic;margin-left:6px}
 h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:28px 0 12px}
 .lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;z-index:100;cursor:zoom-out}
 .lightbox.on{display:flex}.lightbox img{max-width:96%;max-height:96%;border:1px solid var(--border);border-radius:4px}
@@ -200,6 +253,7 @@ code{background:var(--panel2);padding:2px 5px;border-radius:3px;font-size:12px;c
   </header>
 
   <div class="kpis">
+    <div class="kpi"><div class="kpi-l">Journeys</div><div class="kpi-v">{{JOURNEY_COUNT}}</div></div>
     <div class="kpi"><div class="kpi-l">Steps</div><div class="kpi-v">{{STEP_COUNT}}</div></div>
     <div class="kpi ok"><div class="kpi-l">OK</div><div class="kpi-v">{{OK_COUNT}}</div></div>
     <div class="kpi warn"><div class="kpi-l">Friction</div><div class="kpi-v">{{WARN_COUNT}}</div></div>
@@ -207,14 +261,12 @@ code{background:var(--panel2);padding:2px 5px;border-radius:3px;font-size:12px;c
     <div class="kpi"><div class="kpi-l">Playwright</div><div class="kpi-v" style="font-size:15px">{{PW_STATUS}}</div></div>
   </div>
 
-  <div class="timeline">
-    {{STEPS_HTML}}
-  </div>
+  {{JOURNEYS_HTML}}
 
   {{GENERAL_FINDINGS_BLOCK}}
 
   <footer>
-    <div>Spec: <code>{{SPEC_PATH}}</code></div>
+    <div>Specs: <code>.swarm-test/runs/{{RUN_TS}}/&lt;journey&gt;/journey.spec.ts</code></div>
     <div>Memory: <code>.swarm-test/memory/</code></div>
   </footer>
 </div>
@@ -232,45 +284,56 @@ document.querySelectorAll('.shot').forEach(img=>{
 Substitutions:
 
 - `{{FEATURE_TITLE}}` — one-line description of what was tested
-- `{{TIMESTAMP}}` — human date (`2026-05-16 14:20`)
+- `{{TIMESTAMP}}` — human date (`2026-06-29 17:40`)
 - `{{RUN_TS}}` — the ISO timestamp of the run dir
 - `{{TARGET_URL}}`
-- `{{STEP_COUNT}}` — total number of steps
-- `{{OK_COUNT}}`, `{{WARN_COUNT}}`, `{{BAD_COUNT}}` — counts of findings by severity
-- `{{PW_STATUS}}` — e.g. `2/3 passed`
-- `{{SPEC_PATH}}` — relative path to the spec file
-- `{{STEPS_HTML}}` — the heart of the report: one `<div class="step …">` per step, **in execution order**. For every step you must fill all three parts (action, screenshot, findings) so the user can verify without cross-referencing. Per-step template:
+- `{{JOURNEY_COUNT}}` — number of journeys in the swarm
+- `{{STEP_COUNT}}` — total steps across all journeys
+- `{{OK_COUNT}}`, `{{WARN_COUNT}}`, `{{BAD_COUNT}}` — finding counts by severity (after dedup)
+- `{{PW_STATUS}}` — aggregate, e.g. `14/15 passed`
+- `{{JOURNEYS_HTML}}` — one `<section class="journey …">` per journey, in plan order. Per-journey template:
 
   ```html
-  <div class="step <ok|warn|bad>">
-    <div class="step-head">
-      <span class="step-n">Step 01</span>
-      <span class="step-title">Navigate to /pricing</span>
-      <span class="tag <ok|warn|bad>"><passed | friction | broken></span>
+  <section class="journey">
+    <div class="journey-head">
+      <span class="journey-title">01 · Subscribe happy path</span>
+      <span class="jtype">happy</span>
+      <span class="jstatus <ok|warn|bad>"><passed | 1 friction | 1 broken></span>
     </div>
-    <div class="step-action">
-      <b>Action:</b> what you actually did in this step (the click/fill/navigation), in plain language.<br>
-      <b>Expected:</b> what should happen. <b>Observed:</b> what the screenshot shows.
+    <div class="journey-sub">Playwright 5/5 · subdir <code>01-subscribe-happy/</code></div>
+    <div class="timeline">
+      <!-- one .step per step of THIS journey -->
+      <div class="step <ok|warn|bad>">
+        <div class="step-head">
+          <span class="step-n">Step 01</span>
+          <span class="step-title">Navigate to /pricing</span>
+          <span class="tag <ok|warn|bad>"><passed | friction | broken></span>
+        </div>
+        <div class="step-action">
+          <b>Action:</b> what the agent did.<br>
+          <b>Expected:</b> what should happen. <b>Observed:</b> what the screenshot shows.
+        </div>
+        <img class="shot" src="01-subscribe-happy/01-navigate.png" alt="Step 01">
+        <!-- if no screenshot: <div class="no-shot">No screenshot — step did not execute (blocked at step N)</div> -->
+        <div class="finding <ok|warn|bad>">
+          <span class="lbl"><wording|ux|business|dead-end|error|missing-info></span>
+          Factual observation, quote visible text.
+          <span class="seen">seen in 2 journeys</span>
+          <div class="sugg">Suggestion: concrete fix.</div>
+        </div>
+      </div>
     </div>
-    <img class="shot" src="01-navigate.png" alt="Step 01">
-    <!-- if no screenshot exists for this step: -->
-    <!-- <div class="no-shot">No screenshot — step did not execute (blocked at step N)</div> -->
-    <!-- zero or more findings tied to THIS step: -->
-    <div class="finding <ok|warn|bad>">
-      <span class="lbl"><wording|ux|business|dead-end|error|missing-info></span>
-      Factual observation, quote visible text from the screenshot when relevant.
-      <div class="sugg">Suggestion: concrete fix.</div>
-    </div>
-  </div>
+  </section>
   ```
 
-  Rules for `{{STEPS_HTML}}`:
-  - The image `src` is just the filename (report and screenshots share the run dir).
-  - The step's severity class = the worst finding on it (`bad` > `warn` > `ok`). No findings = `ok`.
-  - Always include the **Action / Expected / Observed** line, even when the step passed cleanly — that's what makes the run verifiable.
-  - If a step failed to execute (blocked earlier), still emit the block with the `no-shot` div and a one-line reason.
+  Rules for `{{JOURNEYS_HTML}}`:
+  - The image `src` is `<journey-subdir>/<filename>.png` — the report sits at the run root, screenshots live in each journey's subdir.
+  - A journey's status = its worst step (`bad` > `warn` > `ok`); a step's severity = its worst finding.
+  - Always include the **Action / Expected / Observed** line, even for clean steps — that's what makes the run verifiable.
+  - A journey that failed to execute still gets its section, with `no-shot` and a one-line reason.
+  - Add the `seen in N journeys` span only on deduped findings (N > 1).
 
-- `{{GENERAL_FINDINGS_BLOCK}}` — only for findings NOT tied to a specific step (e.g. cross-cutting business-rule observations). If there are none, substitute an empty string. Otherwise:
+- `{{GENERAL_FINDINGS_BLOCK}}` — cross-cutting findings not tied to one step. Empty string if none. Otherwise:
   ```html
   <h2>General findings</h2>
   <div class="finding warn"><span class="lbl">business</span> … <div class="sugg">Suggestion: …</div></div>
@@ -287,23 +350,23 @@ case "$(uname)" in
 esac
 ```
 
-Tell the user the report path in the terminal summary so they know where to find it later.
+Tell the user the report path in the terminal summary.
 
-### 9. Learn from the user's reaction
+### 8. Learn from the user's reaction
 
 After you report, the user may confirm or dismiss findings:
-- **Confirms a finding** ("yes that's wrong, fix it") → append a one-liner to `.swarm-test/memory/learned-rules.md` describing the pattern, so future runs are more sensitive to it.
-- **Dismisses a finding** ("nah that's intentional") → append to `.swarm-test/memory/known-false-positives.md` describing the pattern, so future runs skip it.
+- **Confirms** ("yes that's wrong, fix it") → append a one-liner to `.swarm-test/memory/learned-rules.md` describing the pattern, so future runs are more sensitive to it.
+- **Dismisses** ("nah that's intentional") → append to `.swarm-test/memory/known-false-positives.md` describing the pattern, so future runs (and the agents' analysis) skip it.
 
-Keep entries short (one line each, with date prefix). Don't accumulate noise.
+One line each, date prefix. Don't accumulate noise.
 
 ## Handling authentication
 
-Many apps gate the feature you just shipped behind auth. Driving a full sign-in flow from a Playwright spec is fragile. Strategies in order of preference:
+Many apps gate the feature behind auth. Resolve this once in phase 4 so every parallel agent shares the same session. Strategies in order of preference:
 
 ### Strategy A — reuse a pre-authenticated browser session (best)
 
-This is **auth-agnostic**. `storageState` snapshots the browser's cookies + localStorage for the app's origin — that's where almost every auth scheme persists the session. It works regardless of the provider: classic server-side sessions (Rails/Django/Express-session), JWT-in-cookie, JWT/token in localStorage, OAuth/OIDC (Auth0, Keycloak, Authentik, Okta, Google…), NextAuth, SAML. Whatever the login mechanism, the end result is a session in the browser on the app domain — that's what gets captured.
+**Auth-agnostic.** `storageState` snapshots the browser's cookies + localStorage for the app's origin — where almost every scheme persists the session: server-side sessions (Rails/Django/Express-session), JWT-in-cookie, token-in-localStorage, OAuth/OIDC (Auth0, Keycloak, Authentik, Okta, Google…), NextAuth, SAML.
 
 Ask the user to sign in once and export the state:
 
@@ -311,66 +374,59 @@ Ask the user to sign in once and export the state:
    ```bash
    npx playwright open --save-storage=.swarm-test/auth/storage.json <dev-url>
    ```
-   They sign in in the launched browser however the app requires, then close it. Cookies + localStorage are saved.
-2. In your spec, load that state:
+   They sign in however the app requires, then close it.
+2. Every agent's spec loads that state:
    ```ts
    test.use({ storageState: '.swarm-test/auth/storage.json' });
    ```
 
-The `.swarm-test/auth/` directory MUST be gitignored (the session is per-person and sensitive). The skill auto-adds it on first use:
+`.swarm-test/auth/` MUST be gitignored. The skill auto-adds it:
 ```bash
 grep -q '^\.swarm-test/auth/' .gitignore || echo '.swarm-test/auth/' >> .gitignore
 ```
 
-**Caveats where Strategy A is NOT enough** — fall back to Strategy B:
-- **Session stored in IndexedDB** (e.g. Firebase Auth). `storageState` captures cookies + localStorage only, NOT IndexedDB — the saved state won't carry the session. Use a programmatic login fixture instead.
-- **Short-lived tokens.** State goes stale fast; if it's older than a few hours, ask the user to re-capture.
-- **Session bound to IP / device fingerprint.** The backend may reject a replayed session.
+**Caveats where Strategy A is NOT enough** — fall back to B:
+- **Session in IndexedDB** (e.g. Firebase Auth). `storageState` captures cookies + localStorage only. Use a programmatic login fixture.
+- **Short-lived tokens.** Stale fast; if older than a few hours, re-capture.
+- **Session bound to IP / device fingerprint.** Backend may reject a replayed session.
 - **Client TLS certificate auth.** Not covered by storageState.
 
 ### Strategy B — programmatic test credentials
 
 Look for test credentials in:
-1. The project root `CLAUDE.md` (look for a "Test accounts" or "Test credentials" section)
+1. Project root `CLAUDE.md` ("Test accounts" / "Test credentials")
 2. `.swarm-test/memory/learned-rules.md`
-3. `.env.test` or `.env.local` in the project
+3. `.env.test` or `.env.local`
 
-If found, hardcode the flow in the spec (`getByLabel('Email').fill(...)` etc.). Never log the password to stdout.
-
-If no credentials are documented, ASK the user. Do not invent credentials.
+If found, the brief passes them to each agent to hardcode the login flow (`getByLabel('Email').fill(...)`). Never log the password. If none documented, ASK the user. Don't invent credentials.
 
 ### Strategy C — bypass the auth wall
 
-If the feature is reachable via a public route or behind a feature flag, ask the user if the test should hit it directly (e.g. with a magic query param like `?test_mode=1`). Only do this if the user explicitly says it's safe.
+If the feature is reachable via a public route or feature flag, ask the user if a journey may hit it directly (e.g. `?test_mode=1`). Only if the user says it's safe.
 
 ### When all else fails
 
-If auth can't be solved in this run, write the spec anyway but stop at the login screen. Take a screenshot of the login page. Tell the user:
-> The spec gets to the login screen but can't go further without test credentials or a saved session. Choose strategy A or B from the swarm-test skill and re-run.
+If auth can't be solved this run, the relevant journeys' agents stop at the login screen and screenshot it. Tell the user:
+> The swarm reaches the login screen but can't go further without test credentials or a saved session. Choose strategy A or B and re-run.
 
-This is still useful: you've validated that the entry route renders, you've captured the login UI for visual review, and you've not wasted a long Playwright run on a flow that was always going to fail.
+Still useful: entry route renders, login UI captured, no long run wasted on a doomed flow.
 
 ## Anti-patterns — don't do these
 
-- ❌ Maintain a `flows/*.md` catalog. You test what was just coded, not a static catalog.
-- ❌ Crawl the entire app to "be thorough". Stay scoped to the change.
-- ❌ Skip the screenshot step because "Playwright didn't throw". Visual review is the whole point.
-- ❌ Report a feature as passing without the visual analysis (step 6). Playwright green ≠ feature correct.
-- ❌ Spawn the dev server with `nohup ... &` or detach hacks. Ask the user to run it.
-- ❌ Test things you don't have a clear user journey for. Ask first.
+- ❌ Fan out before showing the case plan. Plan all cases, show them, THEN swarm (unless "swarm auto").
+- ❌ Write one happy-path spec and call it done. The point is breadth (cases) AND depth (inside modals).
+- ❌ Screenshot a modal's trigger and move on. Go INSIDE the modal/sub-flow.
+- ❌ Let one agent's failure abort the swarm. Agents are isolated; collect what each returns.
+- ❌ Share a screenshot subdir between agents. One subdir per journey.
+- ❌ Crawl the entire app to "be thorough". Every journey stays scoped to the change.
+- ❌ Maintain a `flows/*.md` catalog. You plan from what was just coded, not a static catalog.
+- ❌ Report Playwright-green as "passing" without the visual analysis. Green ≠ correct.
+- ❌ Spawn the dev server yourself (`nohup … &`). Ask the user to run it.
 
 ## Conventions
 
-- One run = one feature scope. If the user just shipped two unrelated things, do two runs.
-- All artifacts under `.swarm-test/runs/<ISO-timestamp>/`. Gitignored.
-- Memory files (`.swarm-test/memory/*.md`) ARE committed — they're the project's accumulated test knowledge.
-- This skill has no required config file. It reads `package.json`, `CLAUDE.md`, lockfiles, and the conversation. That's it.
-
-## Optional: when the user wants a broader sweep
-
-If the user explicitly says "run the full swarm" or "test everything", you can:
-1. List the project's main routes (read from `app/`, `pages/`, or framework router config).
-2. For each, write a minimal smoke spec (navigate, screenshot, assert no console errors).
-3. Run them sequentially.
-
-But this is the exception. The default is feature-driven.
+- One run = one feature. If the user shipped two unrelated things, do two runs.
+- All artifacts under `.swarm-test/runs/<ISO-timestamp>/`, with a subdir per journey. Gitignored.
+- Memory files (`.swarm-test/memory/*.md`) ARE committed — accumulated test knowledge.
+- No required config file. Reads `package.json`, `CLAUDE.md`, lockfiles, and the conversation.
+- Default 3-6 journeys. "go deeper" expands; "swarm auto" skips the plan-confirm pause.
