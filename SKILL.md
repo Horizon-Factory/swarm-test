@@ -1,6 +1,6 @@
 ---
 name: swarm-test
-description: Use when the user asks you to test, validate, verify, or smoke-check a feature they just implemented in this conversation. Triggers on phrases like "run the swarm", "run the swarm test", "test what we just did", "test this feature", "validate this", "smoke test this", "check if it works in the browser", "swarm-test", "/swarm-test". Generates and executes a focused Playwright spec against the local dev server based on what was just coded, captures screenshots, visually analyzes them for UX and business issues, and reports findings. Skip if the project has no web frontend or no dev server.
+description: Use when the user asks you to test, validate, verify, or smoke-check a feature they just implemented in this conversation. Triggers on phrases like "run the swarm", "run the swarm test", "test what we just did", "test this feature", "validate this", "smoke test this", "check if it works in the browser", "swarm-test", "/swarm-test", or when the user asks to run a cahier de recette / test plan / acceptance checklist against the app. Generates and executes a focused Playwright spec against the local dev server based on what was just coded, captures screenshots, visually analyzes them for UX and business issues, and reports findings. Skip if the project has no web frontend or no dev server.
 ---
 
 # swarm-test: validate the feature you just shipped
@@ -11,7 +11,19 @@ You just helped the user implement (or modify) a feature. Now you validate it en
 
 You are NOT running a generic test suite. You are testing **the specific thing you just changed in this conversation**. Use the file edits, diffs, and intent you remember from earlier turns to focus the test on the right surface area.
 
-If you cannot recall a concrete user-visible change from this conversation, STOP and ask the user what to test. Don't crawl the app at random.
+If you cannot recall a concrete user-visible change from this conversation and no cahier de recette was given (see Recette mode), STOP and ask the user what to test. Don't crawl the app at random.
+
+## Recette mode — test against a cahier de recette
+
+Triggered when the user hands you a test plan instead of a fresh change: "swarm-test this recette", "run the swarm on this fiche", a pasted/attached cahier de recette, or a path to one. One-shot acceptance of a whole module, not a regression suite — nothing is kept for later.
+
+In this mode the conversation-change rule above does not apply: the **cahier is the scope**. Steps 1, 4 and 7-8 change as follows; everything else is unchanged.
+
+**The cahier is the only oracle.** Read the code freely for the *how* — routes, selectors, test accounts, seed data, feature flags. Never for the *what*: an expected result comes from the cahier alone. If the code disagrees with the cahier, that is a finding (✗), not a reason to adjust the expectation. A tester who derives expectations from the implementation will only ever confirm that the code does what the code does.
+
+- **Step 1 (recap):** list the cahier's cases as you parsed them — ID, action, expected result. Flag any case whose expected result is not observable on screen ("check it works", "data is saved") as `non testable` and ask the user to make it concrete before running. Do not invent the expectation.
+- **Step 4 (spec):** one `test.step` per cahier line, labelled with its case ID (`RC-03-create-project`). The 3-8 step cap does not apply; split into one spec per cahier section if it passes ~25 steps. Assert each expected result explicitly (`expect(...)`), don't rely on the screenshot alone.
+- **Steps 7-8 (report):** every cahier case gets a verdict — **OK**, **KO** (quote expected vs observed), or **non testable** (why). Put the verdict and the cahier's own wording in each step block's Action/Expected/Observed line. UX findings outside the cahier go under General findings, clearly separated from the verdicts: the cahier decides pass/fail, not your taste.
 
 ## Workflow
 

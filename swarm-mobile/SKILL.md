@@ -1,6 +1,6 @@
 ---
 name: swarm-mobile
-description: Use when the user asks you to test, validate, verify, or smoke-check a feature they just implemented in a mobile app running in the iOS Simulator or Android Emulator. Triggers on phrases like "run the mobile swarm", "swarm the simulator", "test this in the simulator", "test this on the iPhone sim", "test this on the emulator", "swarm-mobile", "/swarm-mobile". Drives the app with a focused Maestro flow on a booted simulator/emulator, captures a screenshot per step, visually analyzes them for UX and business issues, and reports findings as an HTML timeline. Works for Flutter and native (Swift/iOS, Kotlin/Android) apps. macOS only for iOS. Skip if the project has no mobile app.
+description: Use when the user asks you to test, validate, verify, or smoke-check a feature they just implemented in a mobile app running in the iOS Simulator or Android Emulator. Triggers on phrases like "run the mobile swarm", "swarm the simulator", "test this in the simulator", "test this on the iPhone sim", "test this on the emulator", "swarm-mobile", "/swarm-mobile", or when the user asks to run a cahier de recette / test plan / acceptance checklist against the mobile app. Drives the app with a focused Maestro flow on a booted simulator/emulator, captures a screenshot per step, visually analyzes them for UX and business issues, and reports findings as an HTML timeline. Works for Flutter and native (Swift/iOS, Kotlin/Android) apps. macOS only for iOS. Skip if the project has no mobile app.
 ---
 
 # swarm-mobile: validate the mobile feature you just shipped
@@ -13,9 +13,21 @@ This is the mobile sibling of `swarm-test`. The **back half is identical** — s
 
 You are NOT running a generic test suite. You are testing **the specific thing you just changed in this conversation** — the screen, widget, or flow you edited. Use the file edits, diffs, and intent from earlier turns to focus the flow.
 
-If you cannot recall a concrete user-visible change from this conversation, STOP and ask the user what to test. Don't crawl the app at random.
+If you cannot recall a concrete user-visible change from this conversation and no cahier de recette was given (see Recette mode), STOP and ask the user what to test. Don't crawl the app at random.
 
 **Environment reality:** the iOS Simulator only exists on **macOS with Xcode**. This skill is meant to run from the Claude Code CLI **on the user's Mac**, not from a remote/Linux session. The Android Emulator can run on Linux but needs hardware acceleration. If you are not on macOS and the target is iOS, say so and stop.
+
+## Recette mode — test against a cahier de recette
+
+Triggered when the user hands you a test plan instead of a fresh change: "swarm-test this recette", "run the swarm on this fiche", a pasted/attached cahier de recette, or a path to one. One-shot acceptance of a whole module, not a regression suite — nothing is kept for later.
+
+In this mode the conversation-change rule above does not apply: the **cahier is the scope**. Steps 1, 4 and 7-8 change as follows; everything else is unchanged.
+
+**The cahier is the only oracle.** Read the code freely for the *how* — routes, selectors, test accounts, seed data, feature flags. Never for the *what*: an expected result comes from the cahier alone. If the code disagrees with the cahier, that is a finding (✗), not a reason to adjust the expectation. A tester who derives expectations from the implementation will only ever confirm that the code does what the code does.
+
+- **Step 1 (recap):** list the cahier's cases as you parsed them — ID, action, expected result. Flag any case whose expected result is not observable on screen ("check it works", "data is saved") as `non testable` and ask the user to make it concrete before running. Do not invent the expectation.
+- **Step 4 (spec):** one flow step (with its `takeScreenshot`) per cahier line, labelled with its case ID (`RC-03-create-project`). The step cap does not apply; split into one flow per cahier section if it passes ~25 steps. Assert each expected result explicitly (`assertVisible`), don't rely on the screenshot alone.
+- **Steps 7-8 (report):** every cahier case gets a verdict — **OK**, **KO** (quote expected vs observed), or **non testable** (why). Put the verdict and the cahier's own wording in each step block's Action/Expected/Observed line. UX findings outside the cahier go under General findings, clearly separated from the verdicts: the cahier decides pass/fail, not your taste.
 
 ## Driver: Maestro
 
