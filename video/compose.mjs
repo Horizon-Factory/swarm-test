@@ -6,7 +6,7 @@ const HEADER = { before: "avant", after: "après" };
 const SAFE_PATH = /^[A-Za-z0-9/._-]+$/;
 const r3 = (n) => Math.round(n * 1000) / 1000;
 
-/** Per step: cut dead time, compress to the budget (×4 max, then trim the middle), sync both sides on the slowest. */
+/** Per step: cut dead time, compress to the budget (×4 max, then keep the end, where the step's result shows), sync both sides on the slowest. */
 export function planCuts(sides, { stepS = 2.5, holdS = 1.5 } = {}) {
   const n = Math.max(0, ...sides.map((x) => x.steps.length));
   const segs = sides.map(() => []);
@@ -18,7 +18,7 @@ export function planCuts(sides, { stepS = 2.5, holdS = 1.5 } = {}) {
       if (!st) return null;
       const d = Math.max(0.1, st.end - st.start);
       const keep = Math.min(d, 4 * stepS);
-      const from = r3(st.start + (d - keep) / 2);
+      const from = r3(st.start + d - keep);
       const speed = r3(Math.min(4, Math.max(1, keep / stepS)));
       return { from, to: r3(from + keep), speed, shown: r3(keep / speed) };
     });
