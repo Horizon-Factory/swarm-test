@@ -206,7 +206,9 @@ async function main(argv) {
     console.error("usage: node record.mjs <script.mjs> <outDir> [--storage=<file>] [--slowmo=<ms>] [before=<url>] after=<url>");
     process.exit(2);
   }
-  const slowMo = Math.min(1000, Math.max(0, Number(opt("slowmo")) || 250));
+  const slowmoArg = opt("slowmo");
+  const slowmoMs = slowmoArg ? Number(slowmoArg) : NaN;
+  const slowMo = Math.min(1000, Math.max(0, Number.isNaN(slowmoMs) ? 250 : slowmoMs));
   const storage = opt("storage") && resolve(opt("storage"));
   const pw = loadPlaywright();
   const script = await import(pathToFileURL(resolve(scriptPath)).href);

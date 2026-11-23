@@ -97,5 +97,5 @@ Horizon Factory · {{SKILL}}</div>
 const lb=document.getElementById('lb');
 document.querySelectorAll('.thumb[data-src]').forEach(b=>b.addEventListener('click',()=>{lb.querySelector('img').src=b.dataset.src;lb.showModal()}));
 lb.addEventListener('click',()=>lb.close());
-document.querySelectorAll('td a').forEach(a=>a.addEventListener('click',()=>{const d=document.querySelector(a.getAttribute('href'));if(d&&d.tagName==='DETAILS')d.open=true}));
+document.querySelectorAll('td a').forEach(a=>a.addEventListener('click',()=>{const d=document.getElementById(a.getAttribute('href').slice(1));if(d&&d.tagName==='DETAILS')d.open=true}));
 </script></body></html>
