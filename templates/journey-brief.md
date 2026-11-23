@@ -60,6 +60,14 @@ Drop any finding matching `.swarm-test/memory/known-false-positives.md`.
 - Run: `npx playwright test <subdir>/journey.spec.ts --reporter=line`.
 - A step fails → retry ONCE with a better selector/wait, then continue with what you have.
 
+## Video script  <!-- only when the before/after video is on; delete otherwise -->
+
+Once your journey passes, write `<subdir>/video.mjs` showing the change, following the
+**Script** rules (including the mandatory `title`) of the skill's *Before/after video* section (pasted here by the main agent).
+Check it with `node ~/.claude/skills/swarm-test/video/record.mjs <subdir>/video.mjs <subdir>/video-check --storage=<storageState> after=<url>`
+from `<dir where Playwright is installed>`; keep it only if it prints `after: ok`, else delete it.
+Add `"video_script": true|false` to your return JSON.
+
 ## Return contract — your final message is THIS JSON, nothing else
 
 ```json
