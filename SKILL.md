@@ -1,6 +1,6 @@
 ---
 name: swarm-test
-description: Use when the user asks you to test, validate, verify, or smoke-check a feature they just implemented in this conversation. Triggers on phrases like "run the swarm", "run the swarm test", "test what we just did", "test this feature", "validate this", "smoke test this", "check if it works in the browser", "swarm-test", "/swarm-test". Plans ALL cases for the feature (happy + edge + error + empty-state + modal-depth), shows that plan, then fans out a swarm of parallel subagents — each writes and runs its own focused Playwright spec, captures screenshots, visually analyzes them for UX and business issues, and reports back. Findings are merged into one report. Skip if the project has no web frontend or no dev server.
+description: Use when the user asks to test, validate or smoke-check a web feature they just implemented ("run the swarm", "test this feature", "check it in the browser", "/swarm-test", a cahier de recette), or wants a before/after video of a change or fix. Plans all cases, then fans out parallel subagents running Playwright specs with screenshot review, merged into one report. Needs a web frontend.
 ---
 
 # swarm-test: plan every case, then swarm it
@@ -18,23 +18,24 @@ You are NOT running a generic test suite, and you are NOT writing one shallow ha
 
 The planning happens in the main conversation because **you** have the context — the file edits, diffs, and intent from earlier turns. The subagents start fresh, so everything they need goes into their brief.
 
-If you cannot recall a concrete user-visible change from this conversation, STOP and ask the user what to test. Don't crawl the app at random.
+If you cannot recall a concrete user-visible change from this conversation and no cahier de recette was given (see Recette mode), STOP and ask the user what to test. Don't crawl the app at random.
+
+## Recette mode — test against a cahier de recette
+
+Triggered when the user hands you a test plan instead of a fresh change: "swarm-test this recette", "run the swarm on this fiche", a pasted/attached cahier de recette, or a path to one. One-shot acceptance of a whole module, not a regression suite — nothing is kept for later.
+
+In this mode the conversation-change rule above does not apply: the **cahier is the scope**. Phases 1, 3, 5 and 6-7 change as follows; everything else is unchanged.
+
+**The cahier is the only oracle.** Read the code freely for the *how* — routes, selectors, test accounts, seed data, feature flags. Never for the *what*: an expected result comes from the cahier alone. If the code disagrees with the cahier, that is a finding (✗), not a reason to adjust the expectation. A tester who derives expectations from the implementation will only ever confirm that the code does what the code does.
+
+- **Phase 1 (recap):** list the cahier's cases as you parsed them — ID, action, expected result. Flag any case whose expected result is not observable on screen ("check it works", "data is saved") as `non testable` and ask the user to make it concrete before running. Do not invent the expectation.
+- **Phase 3 (plan):** the cahier IS the case matrix — do not invent extra journeys. One journey per cahier section (or per group of cases sharing a precondition); its steps are the cahier lines, in order, labelled with their case IDs (`RC-03-create-project`). The 3-6 journey and 3-8 step caps do not apply; split a journey past ~15 steps. Mutating-journey rules still hold.
+- **Phase 5 (briefs):** copy each case's expected result **verbatim** from the cahier into the brief, and tell the agent to assert it explicitly (`expect(...)`), not rely on the screenshot alone. The agent reports `expected` as the cahier wording.
+- **Phases 6-7 (merge + report):** every cahier case gets a verdict — **OK**, **KO** (quote expected vs observed), **non testable** (why) or **non exécuté** — shown in the terminal matrix and in each step block. The report uses the `recette` mode (phase 7). UX findings outside the cahier go under General findings, clearly separated from the verdicts: the cahier decides pass/fail, not your taste.
 
 ## Workflow
 
 Follow these phases in order. Skip none. The structure exists to keep you honest.
-
-### 0. Version check (best-effort, non-blocking)
-
-Run this once, ignore any error, never let it block the run:
-
-```bash
-D=~/.claude/skills/swarm-test; [ -d "$D/.git" ] && git -C "$D" fetch --quiet origin main 2>/dev/null && \
-  LOCAL=$(git -C "$D" rev-parse HEAD) && REMOTE=$(git -C "$D" rev-parse origin/main) && \
-  [ "$LOCAL" != "$REMOTE" ] && echo "OUTDATED" || echo "OK"
-```
-
-If it prints `OUTDATED`, mention in one line: _"A newer swarm-test exists — run `~/.claude/skills/swarm-test/install.sh --update` when convenient."_ Then continue. If the path doesn't exist (skill vendored elsewhere), skip silently.
 
 ### 1. Recap what you changed (output to user)
 
@@ -61,7 +62,7 @@ curl -fsS --max-time 3 http://localhost:<port>/ >/dev/null && echo READY || echo
 - **READY** → proceed.
 - **DOWN** → **do NOT spawn the server yourself.** Tell the user the exact command, derived from the detected package manager (lockfile in the same dir or above: `pnpm-lock.yaml` → `pnpm`, `yarn.lock` → `yarn`, `bun.lockb` → `bun`, `package-lock.json` → `npm`; or `packageManager` in package.json):
 
-  > Your dev server is not responding on http://localhost:3000. Run `pnpm run dev` from `/Users/.../apps/uca` in another terminal, wait for it to be ready, then say "go".
+  > Your dev server is not responding on http://localhost:3000. Run `pnpm run dev` from `/Users/.../your-app` in another terminal, wait for it to be ready, then say "go".
 
   Wait for explicit confirmation. Server lifecycle is the user's concern.
 
@@ -90,6 +91,8 @@ swarm-test plan — <feature, 1 line>   ·   target http://localhost:<port>
  03  Declined card            error        yes    inline error copy is actionable, retry works
  04  Empty pricing (no plans) empty-state  no     empty state renders, no dead end
 
+Vidéo avant/après : oui — avant = <ref> sur :<port> (réponds « sans vidéo » pour la retirer)
+
 4 journeys → 4 parallel agents. Reply "go" to swarm, "swarm auto" to skip this confirm next time, or edit the list.
 ```
 
@@ -113,7 +116,14 @@ Create one run dir, with a subdir per journey:
 ...
 ```
 
-e.g. `.swarm-test/runs/2026-06-29T17-40-00/`. Each journey gets its own subdir so parallel agents never collide on screenshot filenames. If the feature is behind auth, resolve the auth strategy now (see **Handling authentication**) so every agent can share the same `storageState`.
+e.g. `.swarm-test/runs/2026-06-29T17-40-00/`. Record the exact code the swarm tests — a fix after the swarm films against it (see **Fix after the swarm**). This snapshots the working tree, uncommitted and untracked files included (`.gitignore` respected), as a commit, without touching the working tree, the index or any branch:
+
+```bash
+T=$(mktemp); cp "$(git rev-parse --git-path index)" "$T"; GIT_INDEX_FILE="$T" git add -A
+git commit-tree "$(GIT_INDEX_FILE="$T" git write-tree)" -p HEAD -m swarm-tested > .swarm-test/runs/<ts>/tested-ref; rm "$T"
+```
+
+ Each journey gets its own subdir so parallel agents never collide on screenshot filenames. If the feature is behind auth, resolve the auth strategy now (see **Handling authentication**) so every agent can share the same `storageState`.
 
 ### 5. Fan out the swarm
 
@@ -199,151 +209,76 @@ Severity scale: ✗ **broken** (user blocked / business rule violated) · ⚠ **
 
 ### 7. Generate the visual report
 
-Write a self-contained `report.html` to `.swarm-test/runs/<ts>/report.html` — chronological, grouped **by journey**, so the user can verify exactly what each agent tested. No external CSS/JS, no CDNs; must work offline via `file://`.
+Copy `templates/report.html` (in this skill dir) to `.swarm-test/runs/<ts>/report.html` and fill every `{{…}}` placeholder. Don't restyle it — the CSS, the Horizon Factory branding, dark mode, the lightbox and the collapse behaviour are all in the template. The report is written in **French**, and it can go to a client: no internal jargon in the visible text.
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>swarm-test · {{FEATURE_TITLE}}</title>
-<style>
-:root{--bg:#0d1117;--panel:#161b22;--panel2:#1f2630;--border:#30363d;--text:#e6edf3;--dim:#8b949e;--green:#3fb950;--yellow:#d29922;--red:#f85149;--orange:#db6d28;--accent:#58a6ff}
-*{box-sizing:border-box}html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif}
-.wrap{max-width:980px;margin:0 auto;padding:24px}
-header{padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:20px}
-h1{font-size:18px;margin:0 0 4px}.sub{color:var(--dim);font-size:13px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:28px}
-.kpi{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px}
-.kpi-l{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
-.kpi-v{font-size:22px;font-weight:600}.kpi.ok .kpi-v{color:var(--green)}.kpi.warn .kpi-v{color:var(--yellow)}.kpi.bad .kpi-v{color:var(--red)}
-.journey{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:18px}
-.journey-head{display:flex;align-items:center;gap:10px;margin-bottom:4px}
-.journey-title{font-size:16px;font-weight:600}
-.jtype{font-size:10px;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;background:var(--panel2);color:var(--accent);border:1px solid var(--border)}
-.jstatus{margin-left:auto;font-size:11px;padding:2px 10px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;background:var(--border);color:var(--dim)}
-.jstatus.ok{background:var(--green);color:#000}.jstatus.warn{background:var(--orange);color:#fff}.jstatus.bad{background:var(--red);color:#fff}
-.journey-sub{color:var(--dim);font-size:12px;margin-bottom:16px}
-.timeline{position:relative;margin-left:6px;padding-left:24px;border-left:2px solid var(--border)}
-.step{position:relative;margin-bottom:24px}
-.step::before{content:'';position:absolute;left:-33px;top:2px;width:14px;height:14px;border-radius:50%;border:3px solid var(--panel);background:var(--dim)}
-.step.ok::before{background:var(--green)}.step.warn::before{background:var(--yellow)}.step.bad::before{background:var(--red)}
-.step-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-.step-n{font-variant-numeric:tabular-nums;color:var(--dim);font-size:13px}
-.step-title{font-weight:600;font-size:15px}
-.tag{margin-left:auto;font-size:10px;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;background:var(--border);color:var(--dim)}
-.tag.ok{background:var(--green);color:#000}.tag.warn{background:var(--orange);color:#fff}.tag.bad{background:var(--red);color:#fff}
-.step-action{color:var(--dim);font-size:13px;margin-bottom:10px}
-.step-action b{color:var(--text);font-weight:500}
-.shot{width:100%;display:block;border:1px solid var(--border);border-radius:8px;background:var(--panel2);cursor:zoom-in}
-.no-shot{padding:16px;border:1px dashed var(--border);border-radius:8px;color:var(--dim);font-size:13px;text-align:center}
-.finding{background:var(--panel2);border-left:3px solid var(--yellow);border-radius:4px;padding:10px 14px;margin-top:10px;font-size:13px}
-.finding.bad{border-left-color:var(--red)}.finding.warn{border-left-color:var(--orange)}.finding.ok{border-left-color:var(--green)}
-.finding .lbl{display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.04em;margin-right:8px;background:var(--border);color:var(--dim);vertical-align:middle}
-.finding.bad .lbl{background:var(--red);color:#fff}.finding.warn .lbl{background:var(--orange);color:#fff}.finding.ok .lbl{background:var(--green);color:#000}
-.finding .sugg{color:var(--dim);font-size:12px;margin-top:4px}
-.finding .seen{color:var(--dim);font-size:11px;font-style:italic;margin-left:6px}
-h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:28px 0 12px}
-.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;z-index:100;cursor:zoom-out}
-.lightbox.on{display:flex}.lightbox img{max-width:96%;max-height:96%;border:1px solid var(--border);border-radius:4px}
-footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--border);color:var(--dim);font-size:12px}
-code{background:var(--panel2);padding:2px 5px;border-radius:3px;font-size:12px;color:var(--text)}
-</style>
-</head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>{{FEATURE_TITLE}}</h1>
-    <div class="sub">{{TIMESTAMP}} · {{TARGET_URL}} · run {{RUN_TS}}</div>
-  </header>
+This run report is the per-journey log. When several runs together answer a list of points (a client's remarks, a weekly's action items), add a summary page on top that links to each run's `report.html` and reuses its screenshots as evidence.
 
-  <div class="kpis">
-    <div class="kpi"><div class="kpi-l">Journeys</div><div class="kpi-v">{{JOURNEY_COUNT}}</div></div>
-    <div class="kpi"><div class="kpi-l">Steps</div><div class="kpi-v">{{STEP_COUNT}}</div></div>
-    <div class="kpi ok"><div class="kpi-l">OK</div><div class="kpi-v">{{OK_COUNT}}</div></div>
-    <div class="kpi warn"><div class="kpi-l">Friction</div><div class="kpi-v">{{WARN_COUNT}}</div></div>
-    <div class="kpi bad"><div class="kpi-l">Broken</div><div class="kpi-v">{{BAD_COUNT}}</div></div>
-    <div class="kpi"><div class="kpi-l">Playwright</div><div class="kpi-v" style="font-size:15px">{{PW_STATUS}}</div></div>
-  </div>
+**Pick the mode first.** Recette mode (a cahier was given) and feature mode share the layout; only the vocabulary changes.
 
-  {{JOURNEYS_HTML}}
+| | `recette` | `feature` |
+|---|---|---|
+| `{{SKILL}}` | `swarm-test · recette` | `swarm-test` |
+| `{{TABLE_TITLE}}` | `Tous les cas` | `Parcours testés` |
+| `{{TABLE_HEAD}}` | `<th>Cas</th><th>Intitulé</th><th>Parcours</th><th>Verdict</th>` | `<th>#</th><th>Parcours</th><th>Type</th><th>Verdict</th>` |
+| Table rows | one per cahier case, in cahier order | one per journey, in plan order |
+| Pill `ok` | `OK` | `OK` |
+| Pill `warn` | `OK · remarque` | `Friction` |
+| Pill `ko` | `KO` | `Cassé` |
+| Pill `nt` | `Non testable` | — |
+| Pill `nx` | `Non exécuté` | `Non exécuté` |
+| What makes it `ko` | the cahier only | a `bad` finding |
 
-  {{GENERAL_FINDINGS_BLOCK}}
+A step's class is its verdict; in feature mode map the agent's severity `bad → ko`, `warn → warn`, `ok → ok`. A journey's pill is its worst step: `ko` > `nx` > `warn` > `ok`.
 
-  <footer>
-    <div>Specs: <code>.swarm-test/runs/{{RUN_TS}}/&lt;journey&gt;/journey.spec.ts</code></div>
-    <div>Memory: <code>.swarm-test/memory/</code></div>
-  </footer>
-</div>
+**Verdict block** — `{{VERDICT_CLASS}}` is `ko`, `warn` or `ok`:
 
-<div class="lightbox" id="lb" onclick="this.classList.remove('on')"><img id="lbi" src=""></div>
-<script>
-document.querySelectorAll('.shot').forEach(img=>{
-  img.addEventListener('click',()=>{document.getElementById('lbi').src=img.getAttribute('src');document.getElementById('lb').classList.add('on')})
-});
-</script>
-</body>
-</html>
-```
+| Worst result | Recette headline | Feature headline | Class |
+|---|---|---|---|
+| any `ko` | `Recette non validée` | `Feature bloquante` | `ko` |
+| any `nx` or `nt` | `Recette incomplète` | `Tests incomplets` | `warn` |
+| any `warn` | `Recette validée avec remarques` | `Feature OK avec frictions` | `warn` |
+| all `ok` | `Recette validée` | `Feature OK` | `ok` |
 
-Substitutions:
+`{{VERDICT_SUMMARY}}` is one line of counts, KO first and bold, zero counts dropped — recette: `<b>1 KO</b> · 5/8 cas OK · 3 remarques · 1 non testable · 1 non exécuté`; feature: `<b>1 cassé</b> · 2 frictions · 4 parcours · 12/13 étapes Playwright`.
 
-- `{{FEATURE_TITLE}}` — one-line description of what was tested
-- `{{TIMESTAMP}}` — human date (`2026-06-29 17:40`)
-- `{{RUN_TS}}` — the ISO timestamp of the run dir
-- `{{TARGET_URL}}`
-- `{{JOURNEY_COUNT}}` — number of journeys in the swarm
-- `{{STEP_COUNT}}` — total steps across all journeys
-- `{{OK_COUNT}}`, `{{WARN_COUNT}}`, `{{BAD_COUNT}}` — finding counts by severity (after dedup)
-- `{{PW_STATUS}}` — aggregate, e.g. `14/15 passed`
-- `{{JOURNEYS_HTML}}` — one `<section class="journey …">` per journey, in plan order. Per-journey template:
-
+**Other placeholders:**
+- `{{TITLE}}` — `Recette <module>` or `Feature — <what changed>`.
+- `{{META}}` — `27 septembre 2026, 14:32 · http://localhost:3000 · run 2026-09-27T14-32-00`.
+- `{{TABLE_ROWS}}` — the link target is the step's `id` (recette: the case ID; feature: the journey's first step), so a click opens it:
+  ```html
+  <tr><td class="mono">RC-04</td><td><a href="#RC-04">Bulle de son propre pal</a></td><td class="dim">Île et interactions</td><td><span class="pill ko">KO</span></td></tr>
+  ```
+- `{{JOURNEYS_HTML}}` — one section per journey. OK steps are collapsed (no `open`); every other step is `open`:
   ```html
   <section class="journey">
-    <div class="journey-head">
-      <span class="journey-title">01 · Subscribe happy path</span>
-      <span class="jtype">happy</span>
-      <span class="jstatus <ok|warn|bad>"><passed | 1 friction | 1 broken></span>
-    </div>
-    <div class="journey-sub">Playwright 5/5 · subdir <code>01-subscribe-happy/</code></div>
-    <div class="timeline">
-      <!-- one .step per step of THIS journey -->
-      <div class="step <ok|warn|bad>">
-        <div class="step-head">
-          <span class="step-n">Step 01</span>
-          <span class="step-title">Navigate to /pricing</span>
-          <span class="tag <ok|warn|bad>"><passed | friction | broken></span>
+    <header class="j-head"><h3><span class="dim">01</span> Île et interactions</h3><span class="pill ko">KO</span></header>
+    <p class="j-meta">Playwright 5/6 · <code>01-ile/</code></p>
+    <details class="step ko" id="RC-04" open>
+      <summary><span class="dot"></span><span class="mono sid">RC-04</span><span class="st">Bulle de son propre pal</span><span class="pill ko">KO</span></summary>
+      <div class="body"><div class="txt">
+        <p class="action"><span class="k">Action</span>Clique sur l'étiquette de « Pixel ».</p>
+        <div class="cmp">
+          <div class="box exp"><span class="k">Attendu</span>Un bouton « Caresser » et un bouton « Ma chambre ».</div>
+          <div class="box obs"><span class="k">Observé</span>Seul « Ma chambre » est présent.</div>
         </div>
-        <div class="step-action">
-          <b>Action:</b> what the agent did.<br>
-          <b>Expected:</b> what should happen. <b>Observed:</b> what the screenshot shows.
-        </div>
-        <img class="shot" src="01-subscribe-happy/01-navigate.png" alt="Step 01">
-        <!-- if no screenshot: <div class="no-shot">No screenshot — step did not execute (blocked at step N)</div> -->
-        <div class="finding <ok|warn|bad>">
-          <span class="lbl"><wording|ux|business|dead-end|error|missing-info></span>
-          Factual observation, quote visible text.
-          <span class="seen">seen in 2 journeys</span>
-          <div class="sugg">Suggestion: concrete fix.</div>
-        </div>
+        <div class="finding ko"><div class="f-head"><span class="f-lbl">Règle métier</span><span class="seen">vu dans 2 parcours</span></div>
+          <p>Observation factuelle, texte visible cité.</p><p class="fix">→ Correction concrète.</p></div>
       </div>
-    </div>
+      <button class="thumb" data-src="01-ile/03-bulle.png" aria-label="Agrandir la capture RC-04"><img src="01-ile/03-bulle.png" alt="Capture RC-04"></button>
+      </div>
+    </details>
   </section>
   ```
+  - Step ids: recette uses the case ID (`RC-04`); feature uses `<journey>-<step>` (`01-03`). Ids must be unique.
+  - Screenshot paths are relative to the report: `<journey-subdir>/<file>.png`. No screenshot → `<div class="thumb none">Pas de capture</div>` in place of the button, and say why in *Observé*.
+  - Always fill *Action / Attendu / Observé*, even on a clean step — that is what makes the run verifiable. In recette mode *Attendu* is the cahier's wording, verbatim.
+  - Finding labels in French: `Règle métier`, `UX`, `Libellé`, `Impasse`, `Message d'erreur`, `Info manquante`. `vu dans N parcours` only on deduped findings (N > 1). Finding class: `ko`, `warn`, `ok` (informational) or `nt`.
+- `{{EXTRA_SECTIONS}}` — optional blocks after the journeys, empty string if none:
+  - recette, cases flagged non testable: `<h2 class="sec">Non testable</h2>` then per case `<div class="finding nt" id="RC-03"><div class="f-head"><span class="mono">RC-03</span> <b>Intitulé</b></div><p>Pourquoi.</p><p class="fix">→ Attendu à préciser.</p></div>` — and list those cases in the table too.
+  - cross-cutting findings: `<h2 class="sec">Remarques générales</h2>` then `.finding` blocks.
+- `{{FOOTER}}` — `Specs : <code>.swarm-test/runs/<ts>/&lt;parcours&gt;/journey.spec.ts</code> · Mémoire : <code>.swarm-test/memory/</code>`.
 
-  Rules for `{{JOURNEYS_HTML}}`:
-  - The image `src` is `<journey-subdir>/<filename>.png` — the report sits at the run root, screenshots live in each journey's subdir.
-  - A journey's status = its worst step (`bad` > `warn` > `ok`); a step's severity = its worst finding.
-  - Always include the **Action / Expected / Observed** line, even for clean steps — that's what makes the run verifiable.
-  - A journey that failed to execute still gets its section, with `no-shot` and a one-line reason.
-  - Add the `seen in N journeys` span only on deduped findings (N > 1).
-
-- `{{GENERAL_FINDINGS_BLOCK}}` — cross-cutting findings not tied to one step. Empty string if none. Otherwise:
-  ```html
-  <h2>General findings</h2>
-  <div class="finding warn"><span class="lbl">business</span> … <div class="sugg">Suggestion: …</div></div>
-  ```
+Before opening it, check nothing is left unfilled: `grep -o '{{[A-Z_]*}}' <report>` must print nothing.
 
 Then open it:
 
@@ -358,6 +293,18 @@ esac
 
 Tell the user the report path in the terminal summary.
 
+**Then propose the fix yourself — never end a swarm with findings and no offer.** If any finding is ✗ broken or ⚠ friction, close the summary with a numbered fix proposal, worst first, one line each (what you would change, where), and the video line:
+
+```
+Je propose de corriger :
+ 1. ✗ 03 — message d'erreur de carte refusée non actionnable → copie + bouton « Réessayer » (CheckoutForm.tsx)
+ 2. ⚠ 02 — « Gérer » mène à une page vide → lien vers /billing (PlanCard.tsx)
+Vidéo avant/après du fix : oui
+Réponds « go fix » (tout), « fix 1 », ou « sans vidéo ».
+```
+
+Wait for the answer — a fix changes code, the user picks what ships. Leave out what is not yours to fix (a backend you don't own, a finding the user already dismissed) and say why in one line. Recette mode: propose only for KO cases and remarks; never "fix" the cahier. All ✓ ok → no proposal.
+
 ### 8. Learn from the user's reaction
 
 After you report, the user may confirm or dismiss findings:
@@ -365,6 +312,75 @@ After you report, the user may confirm or dismiss findings:
 - **Dismisses** ("nah that's intentional") → append to `.swarm-test/memory/known-false-positives.md` describing the pattern, so future runs (and the agents' analysis) skip it.
 
 One line each, date prefix. Don't accumulate noise.
+
+### 9. Fix after the swarm — with its before/after video
+
+When the user accepts the fix proposal (phase 7) or asks to fix findings ("go fix", "fix 1", "corrige"), the fix gets its own before/after video, **proposed by default** like the swarm's: announce it with the fix (`Vidéo avant/après du fix : oui — réponds « sans vidéo » pour la retirer`) and make it unless the user declines.
+
+- **Before** = the code the swarm tested, `.swarm-test/runs/<ts>/tested-ref` (phase 4). **After** = the dev server with the fix.
+- Before server: reuse the swarm's before worktree — `git -C ../<repo>-before checkout --detach $(cat .swarm-test/runs/<ts>/tested-ref)`; its dev server hot-reloads. No worktree yet → give the user the commands from **Before/after video** with that ref.
+- One script per fixed finding, `.swarm-test/runs/<ts>/fix-<NN>/video.mjs`, following the same **Script** rules (its `title` names the finding and the fix): it replays the finding's repro, and its last step asserts the expected behaviour quoted in the report (it fails before the fix, passes after). Check on after alone, then film with both sides.
+- Re-run the failing journey's spec too: the video shows the fix, the spec proves nothing else broke.
+- In the reply, list each finding with its video path (`fix-<NN>/video/video.mp4`) and the before/after console lines (`before: FAILED — <step>` / `after: ok`). A finding whose after side still fails is **not fixed** — say so.
+
+## Before/after video (proposed by default)
+
+Each journey that shows the change can be filmed **side by side**: the app before the change (left, grey header) and after it (right, green header), the same script replayed on both, a red/green banner on the step that fails or passes. The harness is in `video/` in this skill.
+
+**On by default — always propose it.** Every phase-3 plan carries the line `Vidéo avant/après : oui — avant = <ref> sur :<port> (réponds « sans vidéo » pour la retirer)`, and so does every fix after a swarm (phase 9). Drop it only when the user says so ("sans vidéo"), or when no journey changes what the screen shows (nothing to compare). Recette mode tests a module, not a change: propose it there only when the cahier covers a change with a known base ref. With "swarm auto", keep it on but never wait for the before server: if it is not up when the swarm starts, film the after side alone and say so.
+
+**The "before" server (phase 2).** The before side is the same app at the base ref — the commit before the change (`HEAD` if the change is still uncommitted, else `git merge-base HEAD origin/<base>`). As with the dev server, **do not start it yourself**; give the user the commands:
+
+```bash
+git worktree add ../<repo>-before <base-ref>
+cd ../<repo>-before && <pm> install && cp <path-to-app>/.env <app>/.env   # same env, same DB
+PORT=3100 <pm> run dev                                                # note the port
+```
+
+**Point the copied `.env` at its own port.** A URL baked into the env (`AUTH_URL`, `NEXTAUTH_URL`, `APP_URL`, `NEXT_PUBLIC_*_URL`) still names the main server's port: login and redirects then bounce the before side onto the after server, and both halves of the video show the same code. Set them to the before port, and check `page.url()` on the before side once. Watch the DB too: a copied `.env` may point at a shared dev database (an SSH tunnel), not a local one — then every journey and video script stays read-only.
+
+**Docker stacks are torn down after the run.** When a side runs as a Docker Compose stack (a repo's `qa/compose.yml`, before and after as two projects), name each project after the run (`-p <repo>-<ts>-before`), list both in the reply, and remove them with `docker compose -p <project> down -v` once the report is delivered and no fix is pending — or tell the user the exact commands if you cannot run them. Stacks left up pile across sessions and fill the Docker disk; each can also reserve far more than it stores (an S3 stand-in preallocating its volumes).
+
+No before server (the user declines, or the base ref cannot run) → film the after side alone; the video still shows the change working. Both sides share the DB: a script that creates data must not collide with itself (unique names, e.g. `Date.now()` in the label).
+
+**Script (phase 5).** Add the brief's *Video script* section to every journey whose last step shows the change. The agent writes `<subdir>/video.mjs`:
+
+```js
+export const title = "Dans Juliette, la fenêtre « Nouveautés » s’affichait en sombre. Elle est maintenant claire et lisible.";
+export const start = "/path";   // first page, opened already logged in
+export default async ({ page, step, expect }) => {
+  await step("Short label of the action", async () => { /* … */ });
+  await step("Short label of the expected behaviour", async () => { await expect(/* locator */).toBeVisible(); });
+};
+```
+
+- `title` is mandatory: one or two sentences, in the language of the app's UI, saying where the problem was and what changed (`<where>, <what was wrong>. <what it does now>.`). It opens the video on a 3-second card with the side legend: without it a viewer does not know what to look at.
+- At most 8 steps. Labels are short, in the language of the app's UI: they become the subtitles.
+- `getByRole` / `getByLabel` / `getByText` only. Never `waitForTimeout`. No login inside the steps.
+- The last step asserts the new behaviour — it is meant to fail on the before side.
+- One visible gesture per step: click a control before changing it; open a list in its own step, then choose in the next one (native `<select>`: `click()` it, then `selectOption` — the harness draws the list, the OS one is never filmed); click a field before `fill`. The step that fails on the before side leaves the problem on screen.
+- Each action fails after 5 s: never wait on purpose.
+- Stable paths only in `start` and URLs (no generated ids): reach the page by clicking, as a user would.
+- The agent checks it on the after side alone, from the dir where Playwright is installed, and keeps it only if it prints `after: ok`:
+  ```bash
+  node ~/.claude/skills/swarm-test/video/record.mjs <subdir>/video.mjs <subdir>/video-check --storage=.swarm-test/auth/storage.json after=<url>
+  ```
+
+**Film (after phase 6).** For every journey with a checked `video.mjs`, run — one at a time, each launches two browsers:
+
+```bash
+node ~/.claude/skills/swarm-test/video/record.mjs <subdir>/video.mjs <subdir>/video \
+  --storage=.swarm-test/auth/storage.json before=<before-url> after=<after-url>
+# one-sided: after=<url> --video
+```
+
+It prints `before: FAILED — <step>` / `after: ok`, then `video: <subdir>/video/video.mp4`: a 3-second title card, then both sides at full size (1280×800 each). No mp4 when the after side failed a step (nothing to show) — report that, don't retry blindly. Each side's raw `video.webm` and `last.png` stay in `<subdir>/video/<side>/`.
+
+- **ffmpeg** is required. Homebrew's default `ffmpeg` has no `drawtext`, so the video comes out without labels or subtitles (colours only) and the harness says so; `brew install ffmpeg-full` (keg-only, found automatically) adds them. `FFMPEG=<bin>` forces one.
+- **Auth:** `--storage` loads the saved session on both sides. Cookies on `localhost` ignore the port, so a cookie session works on both servers; a session kept in `localStorage` is per port and will not — then export `login({ page, email, password })` from the script and pass `QA_LOGIN=email:password` in the env instead of `--storage` (never echo it).
+
+**Report.** Put the video at the top of its journey section, before the first step:
+`<video class="clip" controls muted playsinline src="01-slug/video/video.mp4"></video>`
 
 ## Handling authentication
 
@@ -428,6 +444,7 @@ Still useful: entry route renders, login UI captured, no long run wasted on a do
 - ❌ Maintain a `flows/*.md` catalog. You plan from what was just coded, not a static catalog.
 - ❌ Report Playwright-green as "passing" without the visual analysis. Green ≠ correct.
 - ❌ Spawn the dev server yourself (`nohup … &`). Ask the user to run it.
+- ❌ Leave a run's Docker stacks up once its report and fixes are done. `down -v` them.
 
 ## Conventions
 
@@ -435,4 +452,4 @@ Still useful: entry route renders, login UI captured, no long run wasted on a do
 - All artifacts under `.swarm-test/runs/<ISO-timestamp>/`, with a subdir per journey. Gitignored.
 - Memory files (`.swarm-test/memory/*.md`) ARE committed — accumulated test knowledge.
 - No required config file. Reads `package.json`, `CLAUDE.md`, lockfiles, and the conversation.
-- Default 3-6 journeys. "go deeper" expands; "swarm auto" skips the plan-confirm pause.
+- Default 3-6 journeys. "go deeper" expands; "swarm auto" skips the plan-confirm pause; the before/after video is on unless the user says "sans vidéo".

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!-- swarm-test report. Fill every double-brace placeholder; the snippets and the vocabulary per mode
+     (recette | feature) are in swarm-test SKILL.md, phase 7. Self-contained: no CDN, works via file://. -->
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{TITLE}}</title>
+<style>
+:root{--bg:#F6F7F9;--surface:#fff;--line:#E3E6EA;--fg:#14161A;--muted:#5B6270;--accent:#6344FF;
+--ok:#1a7f37;--ok-bg:#e8f5ec;--ko:#c0262d;--ko-bg:#fdecec;--warn:#8a5a00;--warn-bg:#fdf3dc;--nt:#5B6270;--nt-bg:#eef0f3;
+--grad:linear-gradient(135deg,#B541FA 0%,#7E65FF 50%,#76F6F5 100%);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14161A;--surface:#1C1F24;--line:#2C313A;--fg:#E8EAED;--muted:#9AA2AD;--accent:#A492FF;
+--ok:#56d364;--ok-bg:#16301f;--ko:#ff7b72;--ko-bg:#3a1a1c;--warn:#e3b341;--warn-bg:#33290f;--nt:#9AA2AD;--nt-bg:#262a31;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
+.bar{height:3px;background:var(--grad)}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 16px 64px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:.02em}.brand svg{width:22px;height:22px}
+h1{font-size:28px;line-height:1.2;margin:14px 0 4px;letter-spacing:-.01em}.meta{color:var(--muted);font-size:13px;margin:0}
+.verdict{margin:24px 0 32px;background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--c);border-radius:14px;padding:18px 22px}
+.verdict.ko{--c:var(--ko)}.verdict.warn{--c:var(--warn)}.verdict.ok{--c:var(--ok)}
+.verdict h2{margin:0 0 4px;font-size:20px;color:var(--c)}.verdict p{margin:0;color:var(--muted)}.verdict b{color:var(--ko)}
+h2.sec{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:36px 0 12px}
+table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:14px}
+th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--line)}
+td{padding:10px 14px;border-bottom:1px solid var(--line)}tr:last-child td{border-bottom:0}td a{color:inherit;text-decoration:none}td a:hover{color:var(--accent);text-decoration:underline}
+.mono{font:600 12.5px ui-monospace,SFMono-Regular,Menlo,monospace}.dim{color:var(--muted)}
+.pill{display:inline-block;white-space:nowrap;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;color:var(--c);background:var(--b)}
+.pill.ok,.step.ok,.finding.ok{--c:var(--ok);--b:var(--ok-bg)}.pill.ko,.step.ko,.finding.ko{--c:var(--ko);--b:var(--ko-bg)}.pill.warn,.step.warn,.finding.warn{--c:var(--warn);--b:var(--warn-bg)}.pill.nt,.pill.nx,.step.nt,.step.nx,.finding.nt{--c:var(--nt);--b:var(--nt-bg)}
+.journey{margin-top:28px}.j-head{display:flex;align-items:center;gap:12px}.j-head h3{margin:0;font-size:18px}.j-meta{margin:2px 0 12px;color:var(--muted);font-size:13px}.clip{display:block;width:100%;border-radius:10px;margin:0 0 14px;background:#111}
+code{font:12px ui-monospace,Menlo,monospace;background:var(--nt-bg);padding:1px 6px;border-radius:5px}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.step.ko{border-color:color-mix(in srgb,var(--ko) 45%,var(--line))}
+summary{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;list-style:none}summary::-webkit-details-marker{display:none}
+summary:hover{background:var(--bg)}.dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.sid{color:var(--muted)}.st{font-weight:600;flex:1}
+.body{display:grid;grid-template-columns:1fr 300px;gap:20px;padding:4px 16px 16px 38px}
+.k{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:2px}
+.action{margin:0 0 12px}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px}.box{border-radius:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--line);font-size:14px}
+.step.ko .obs{background:var(--ko-bg);border-color:transparent}.step.ko .obs .k{color:var(--ko)}
+.finding{margin-top:12px;border-radius:10px;padding:10px 14px;background:var(--b);border-left:4px solid var(--c)}
+.finding p{margin:2px 0 0;font-size:14px}.finding .fix{color:var(--muted)}
+.f-head{display:flex;align-items:center;gap:8px}.f-lbl{font-size:12px;font-weight:700;color:var(--c)}.seen{font-size:12px;color:var(--muted)}
+.thumb{display:block;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg);cursor:zoom-in;align-self:start}
+.thumb img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover}.thumb.none{aspect-ratio:16/9;display:grid;place-items:center;color:var(--muted);font-size:13px;cursor:default;border-style:dashed}
+.thumb:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+dialog{border:0;padding:0;background:transparent;max-width:94vw}dialog::backdrop{background:rgba(10,12,16,.85)}dialog img{max-width:94vw;max-height:90vh;border-radius:10px;display:block}
+footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+@media (max-width:720px){.body{grid-template-columns:1fr;padding-left:16px}.cmp{grid-template-columns:1fr}h1{font-size:22px}th:nth-child(3),td:nth-child(3){display:none}}
+@media print{details{break-inside:avoid}.bar{print-color-adjust:exact}}
+</style></head><body><div class="bar"></div><div class="wrap">
+<div class="brand"><svg width="54" height="49" viewBox="0 0 54 49" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M4.12983 36.7812H0.686274C0.307256 36.7812 0 37.0883 0 37.4671V40.9086C0 41.2874 0.307256 41.5944 0.686274 41.5944H4.12983C4.50885 41.5944 4.8161 41.2874 4.8161 40.9086V37.4671C4.8161 37.0883 4.50885 36.7812 4.12983 36.7812Z" fill="url(#paint0_linear_819_6999)"/>
+<path d="M9.62983 43.6562H6.18627C5.80726 43.6562 5.5 43.9633 5.5 44.3421V47.7836C5.5 48.1624 5.80726 48.4694 6.18627 48.4694H9.62983C10.0088 48.4694 10.3161 48.1624 10.3161 47.7836V44.3421C10.3161 43.9633 10.0088 43.6562 9.62983 43.6562Z" fill="url(#paint1_linear_819_6999)"/>
+<path d="M48.497 0H45.0535C44.6744 0 44.3672 0.30707 44.3672 0.685859V4.12733C44.3672 4.50612 44.6744 4.81319 45.0535 4.81319H48.497C48.876 4.81319 49.1833 4.50612 49.1833 4.12733V0.685859C49.1833 0.30707 48.876 0 48.497 0Z" fill="url(#paint2_linear_819_6999)"/>
+<path d="M53.3134 7.55859H49.8699C49.4908 7.55859 49.1836 7.86566 49.1836 8.24445V11.6859C49.1836 12.0647 49.4908 12.3718 49.8699 12.3718H53.3134C53.6924 12.3718 53.9997 12.0647 53.9997 11.6859V8.24445C53.9997 7.86566 53.6924 7.55859 53.3134 7.55859Z" fill="url(#paint3_linear_819_6999)"/>
+<path d="M40.7027 4.8125C41.0153 4.8125 41.2712 5.07223 41.2712 5.38473V8.37166C41.2712 8.68415 41.527 8.93983 41.8397 8.93983H45.8639C46.1766 8.93983 46.4324 9.1955 46.4324 9.508V13.5217C46.4324 13.8342 46.1766 14.0899 45.8639 14.0899H43.2163C42.9036 14.0899 42.6478 14.3455 42.6478 14.658V18.6798C42.6478 18.9923 42.9036 19.248 43.2163 19.248H45.8639C46.1766 19.248 46.4324 19.5037 46.4324 19.8162V21.2163C32.11 20.2058 18.0718 22.8193 7.56656 26.0133V5.42125C7.56656 5.10876 7.82239 4.82062 8.13507 4.82062H18.6931C19.0058 4.82062 19.2617 5.07629 19.2617 5.38878V18.5987C19.2617 18.9112 19.5175 19.1668 19.8302 19.1668H34.1688C34.4815 19.1668 34.7373 18.9112 34.7373 18.5987V5.38473C34.7373 5.07223 34.9932 4.81656 35.3059 4.81656H40.7027V4.8125ZM7.5625 28.3914C17.9419 25.1651 32.0613 22.4541 46.4284 23.4971V43.7766C46.4284 44.0891 46.1725 44.3448 45.8599 44.3448H35.3018C34.9891 44.3407 34.7333 44.085 34.7333 43.7685V30.5505C34.7333 30.238 34.4775 29.9823 34.1648 29.9823H19.8261C19.5134 29.9823 19.2576 30.238 19.2576 30.5505V43.7685C19.2576 44.081 19.0018 44.3366 18.6891 44.3366H13.2923C12.9796 44.3366 12.7238 44.081 12.7238 43.7685V40.7856C12.7238 40.4731 12.4679 40.2174 12.1553 40.2174H8.13101C7.81833 40.2174 7.5625 39.9618 7.5625 39.6493V35.7938C7.5625 35.4813 7.81833 35.2257 8.13101 35.2257L10.7786 35.2541C11.0913 35.2541 11.3472 34.9984 11.3472 34.6859V30.6398C11.3472 30.3273 11.0913 30.0716 10.7786 30.0716H8.11883C7.80615 30.0716 7.56656 29.7916 7.56656 29.4791V28.3955L7.5625 28.3914Z" fill="url(#paint4_linear_819_6999)"/>
+<defs>
+<linearGradient id="paint0_linear_819_6999" x1="-13.4575" y1="24.0705" x2="27.9103" y2="63.5304" gradientUnits="userSpaceOnUse">
+<stop offset="0.08" stop-color="#76F6F5"/>
+<stop offset="0.44" stop-color="#7E65FF"/>
+<stop offset="0.94" stop-color="#B541FA"/>
+</linearGradient>
+<linearGradient id="paint1_linear_819_6999" x1="-14.2761" y1="24.927" x2="27.0958" y2="64.3869" gradientUnits="userSpaceOnUse">
+<stop offset="0.08" stop-color="#76F6F5"/>
+<stop offset="0.44" stop-color="#7E65FF"/>
+<stop offset="0.94" stop-color="#B541FA"/>
+</linearGradient>
+<linearGradient id="paint2_linear_819_6999" x1="26.0449" y1="-17.3453" x2="67.4127" y2="22.1186" gradientUnits="userSpaceOnUse">
+<stop offset="0.08" stop-color="#76F6F5"/>
+<stop offset="0.44" stop-color="#7E65FF"/>
+<stop offset="0.94" stop-color="#B541FA"/>
+</linearGradient>
+<linearGradient id="paint3_linear_819_6999" x1="24.5589" y1="-15.789" x2="65.9268" y2="23.6749" gradientUnits="userSpaceOnUse">
+<stop offset="0.08" stop-color="#76F6F5"/>
+<stop offset="0.44" stop-color="#7E65FF"/>
+<stop offset="0.94" stop-color="#B541FA"/>
+</linearGradient>
+<linearGradient id="paint4_linear_819_6999" x1="5.54835" y1="4.14287" x2="46.9162" y2="43.6068" gradientUnits="userSpaceOnUse">
+<stop offset="0.08" stop-color="#76F6F5"/>
+<stop offset="0.44" stop-color="#7E65FF"/>
+<stop offset="0.94" stop-color="#B541FA"/>
+</linearGradient>
+</defs>
+</svg>
+Horizon Factory · {{SKILL}}</div>
+<h1>{{TITLE}}</h1>
+<p class="meta">{{META}}</p>
+<div class="verdict {{VERDICT_CLASS}}"><h2>{{VERDICT_HEADLINE}}</h2><p>{{VERDICT_SUMMARY}}</p></div>
+<h2 class="sec">{{TABLE_TITLE}}</h2>
+<table><thead><tr>{{TABLE_HEAD}}</tr></thead><tbody>{{TABLE_ROWS}}</tbody></table>
+<h2 class="sec">Détail par parcours</h2>
+{{JOURNEYS_HTML}}
+{{EXTRA_SECTIONS}}
+<footer>{{FOOTER}}</footer>
+</div>
+<dialog id="lb" aria-label="Capture"><img alt=""></dialog>
+<script>
+const lb=document.getElementById('lb');
+document.querySelectorAll('.thumb[data-src]').forEach(b=>b.addEventListener('click',()=>{lb.querySelector('img').src=b.dataset.src;lb.showModal()}));
+lb.addEventListener('click',()=>lb.close());
+document.querySelectorAll('td a').forEach(a=>a.addEventListener('click',()=>{const d=document.getElementById(a.getAttribute('href').slice(1));if(d&&d.tagName==='DETAILS')d.open=true}));
+</script></body></html>
