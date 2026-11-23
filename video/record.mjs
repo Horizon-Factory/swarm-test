@@ -182,7 +182,7 @@ async function compose(outDir, results, { chromium, title }) {
   const filmed = results.filter((r) => r.steps.length && existsSync(join(outDir, r.name, "video.webm")));
   const after = filmed.find((r) => r.name === "after");
   // The video exists to show the change working: an "after" side that did not pass every step shows nothing.
-  if (!after || after.steps.some((s) => !s.ok)) return "no video: the after side did not pass every step";
+  if (!after?.ok) return "no video: the after side did not pass every step";
   const ff = findFfmpeg();
   if (!ff) return "no video: ffmpeg not found (brew install ffmpeg-full)";
   const fontSrc = ff.text && (process.env.QA_VIDEO_FONT || FONTS.find((f) => existsSync(f)));

@@ -34,7 +34,8 @@ export function planCuts(sides, { stepS = 2.5, holdS = 1.5 } = {}) {
     sides: sides.map((x, k) => {
       const used = segs[k].reduce((acc, c) => acc + c.shown + c.pad, 0);
       const f = x.steps.findIndex((st) => !st.ok);
-      return { name: x.name, segs: segs[k], tail: r3(total - used), failAt: f < 0 ? null : f };
+      // A side can fail between steps (timeout, script error): every recorded step is ok, the run is not.
+      return { name: x.name, segs: segs[k], tail: r3(total - used), failAt: f >= 0 ? f : x.ok === false ? x.steps.length - 1 : null };
     }),
   };
 }
